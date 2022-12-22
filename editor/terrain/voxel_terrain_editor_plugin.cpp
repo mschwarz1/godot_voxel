@@ -4,6 +4,7 @@
 #include "../../storage/modifiers_gd.h"
 #include "../../terrain/fixed_lod/voxel_terrain.h"
 #include "../../terrain/variable_lod/voxel_lod_terrain.h"
+#include "../../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../../util/godot/callable.h"
 #include "../../util/godot/camera_3d.h"
 #include "../../util/godot/editor_interface.h"

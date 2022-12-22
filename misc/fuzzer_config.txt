@@ -32,6 +32,7 @@ VoxelLodTerrain
 VoxelMeshSDF
 VoxelMesher
 VoxelMesherBlocky
+VoxelMesherCubeSphereBlocky
 VoxelMesherCubes
 VoxelMesherDMC
 VoxelMesherTransvoxel
@@ -46,10 +47,12 @@ VoxelStreamRegionFiles
 VoxelStreamSQLite
 VoxelStreamScript
 VoxelTerrain
+VoxelCubeSphereTerrain
 VoxelTool
 VoxelToolBuffer
 VoxelToolLodTerrain
 VoxelToolTerrain
+VoxelToolCubeSphereTerrain
 VoxelViewer
 VoxelVoxLoader
 ZN_FastNoiseLite

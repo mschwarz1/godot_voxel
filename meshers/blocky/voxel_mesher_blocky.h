@@ -71,18 +71,18 @@ public:
 	}
 
 protected:
-	static void _bind_methods();
 
-private:
-	struct Parameters {
+	struct Parameters 
+	{
 		float baked_occlusion_darkness = 0.8;
 		bool bake_occlusion = true;
 		Ref<VoxelBlockyLibrary> library;
 	};
-
 	struct Cache {
 		std::vector<Arrays> arrays_per_material;
 	};
+
+
 
 	// Parameters
 	Parameters _parameters;
@@ -90,6 +90,14 @@ private:
 
 	// Work cache
 	static Cache &get_tls_cache();
+
+
+	static void _bind_methods();
+
+private:
+
+
+
 };
 
 } // namespace zylann::voxel

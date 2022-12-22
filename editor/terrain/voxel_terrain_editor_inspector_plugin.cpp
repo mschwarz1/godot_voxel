@@ -1,6 +1,7 @@
 #include "voxel_terrain_editor_inspector_plugin.h"
 #include "../../terrain/fixed_lod/voxel_terrain.h"
 #include "../../terrain/variable_lod/voxel_lod_terrain.h"
+#include "../../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../../util/godot/object.h"
 #include "editor_property_aabb_min_max.h"
 
@@ -12,14 +13,22 @@ bool VoxelTerrainEditorInspectorPlugin::can_handle(Object *p_object) {
 bool VoxelTerrainEditorInspectorPlugin::_can_handle(const Variant &p_object_v) const {
 	const Object *p_object = p_object_v;
 #endif
+	
 	const VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(p_object);
 	if (vt != nullptr) {
 		return true;
 	}
+	
 	const VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(p_object);
 	if (vlt != nullptr) {
 		return true;
 	}
+	
+	const VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(p_object);
+	if (vcst != nullptr) {
+		return true;
+	}
+
 	return false;
 }
 

@@ -1,5 +1,6 @@
 #include "voxel_box_mover.h"
 #include "../../meshers/blocky/voxel_mesher_blocky.h"
+#include "../../meshers/cubeSphere/voxel_mesher_cubeSphere_blocky.h"
 #include "../../meshers/cubes/voxel_mesher_cubes.h"
 #include "../../storage/voxel_data.h"
 #include "../../util/godot/ref_counted.h"
@@ -199,8 +200,10 @@ static void collect_boxes(
 
 	Ref<VoxelMesherBlocky> mesher_blocky;
 	Ref<VoxelMesherCubes> mesher_cubes;
+	Ref<VoxelMesherCubeSphereBlocky> mesher_cube_sphere_blocky;
 
-	if (try_get_as(p_terrain.get_mesher(), mesher_blocky)) {
+	if (try_get_as(p_terrain.get_mesher(), mesher_blocky)) 
+	{
 		Ref<VoxelBlockyLibrary> library_ref = mesher_blocky->get_library();
 		ERR_FAIL_COND_MSG(library_ref.is_null(), "VoxelMesherBlocky has no library assigned");
 		VoxelBlockyLibrary &library = **library_ref;
@@ -233,7 +236,45 @@ static void collect_boxes(
 			}
 		}
 
-	} else if (try_get_as(p_terrain.get_mesher(), mesher_cubes)) {
+	} 
+	
+	else if (try_get_as(p_terrain.get_mesher(), mesher_cube_sphere_blocky)) 
+	{
+		Ref<VoxelBlockyLibrary> library_ref = mesher_cube_sphere_blocky->get_library();
+		ERR_FAIL_COND_MSG(library_ref.is_null(), "VoxelMesherBlocky has no library assigned");
+		VoxelBlockyLibrary &library = **library_ref;
+		const int channel = VoxelBufferInternal::CHANNEL_TYPE;
+		VoxelSingleValue defval;
+		defval.i = 0;
+
+		// TODO Optimization: read the whole box of voxels at once, querying individually is slower
+		for (i.z = min_z; i.z < max_z; ++i.z) {
+			for (i.y = min_y; i.y < max_y; ++i.y) {
+				for (i.x = min_x; i.x < max_x; ++i.x) {
+					const int type_id = voxels.get_voxel(i, channel, defval).i;
+
+					if (library.has_voxel(type_id)) {
+						const VoxelBlockyModel &voxel_type = library.get_voxel_const(type_id);
+
+						if ((voxel_type.get_collision_mask() & collision_nask) == 0) {
+							continue;
+						}
+
+						const std::vector<AABB> &local_boxes = voxel_type.get_collision_aabbs();
+
+						for (auto it = local_boxes.begin(); it != local_boxes.end(); ++it) {
+							AABB world_box = *it;
+							world_box.position += i;
+							potential_boxes.push_back(world_box);
+						}
+					}
+				}
+			}
+		}
+
+	} 
+	else if (try_get_as(p_terrain.get_mesher(), mesher_cubes)) 
+	{
 		const int channel = VoxelBufferInternal::CHANNEL_COLOR;
 		VoxelSingleValue defval;
 		defval.i = 0;
@@ -249,6 +290,10 @@ static void collect_boxes(
 				}
 			}
 		}
+	}
+	else
+	{
+		ZN_PRINT_ERROR("Failed to dereference mesher!");
 	}
 }
 

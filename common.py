@@ -26,6 +26,7 @@ def get_sources(env, is_editor_build):
         "constants/*.cpp",
 
         "meshers/blocky/*.cpp",
+        "meshers/cubeSphere/*.cpp",
         "meshers/transvoxel/*.cpp",
         "meshers/dmc/*.cpp",
         "meshers/cubes/*.cpp",
@@ -45,6 +46,7 @@ def get_sources(env, is_editor_build):
         "terrain/*.cpp",
         "terrain/instancing/*.cpp",
         "terrain/fixed_lod/*.cpp",
+        "terrain/fixed_cube_sphere/*.cpp",
         "terrain/variable_lod/*.cpp",
 
         "engine/*.cpp",

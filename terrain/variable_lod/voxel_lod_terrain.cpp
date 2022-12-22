@@ -452,7 +452,7 @@ void VoxelLodTerrain::set_mesh_block_active(VoxelMeshBlockVLT &block, bool activ
 	block.active = active;
 
 	if (!with_fading) {
-		block.set_visible(active);
+		block.set_visible(block.lod_index >= 2 ? active : false);
 
 		// Cancel fading if already in progress
 		if (block.fading_state != VoxelMeshBlockVLT::FADING_NONE) {

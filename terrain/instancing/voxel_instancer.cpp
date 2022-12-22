@@ -15,6 +15,7 @@
 #include "../../util/profiling.h"
 #include "../../util/string_funcs.h"
 #include "../fixed_lod/voxel_terrain.h"
+#include "../fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../variable_lod/voxel_lod_terrain.h"
 #include "voxel_instance_component.h"
 #include "voxel_instance_library_scene_item.h"
@@ -102,57 +103,83 @@ void VoxelInstancer::clear_layers() {
 void VoxelInstancer::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_WORLD:
+		{
 			set_world(*get_world_3d());
 			update_visibility();
 #ifdef TOOLS_ENABLED
 			_debug_renderer.set_world(get_world_3d().ptr());
 #endif
 			break;
+		}
 
 		case NOTIFICATION_EXIT_WORLD:
+		{
 			set_world(nullptr);
 #ifdef TOOLS_ENABLED
 			_debug_renderer.set_world(nullptr);
 #endif
 			break;
-
-		case NOTIFICATION_PARENTED: {
+		}
+		case NOTIFICATION_PARENTED: 
+		{
 			VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(get_parent());
-			if (vlt != nullptr) {
+			VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(get_parent());
+			VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(get_parent());
+
+			if (vlt != nullptr) 
+			{
 				_parent = vlt;
 				_parent_data_block_size_po2 = vlt->get_data_block_size_pow2();
 				_parent_mesh_block_size_po2 = vlt->get_mesh_block_size_pow2();
 				_mesh_lod_distance = vlt->get_lod_distance();
 				vlt->set_instancer(this);
-			} else {
-				VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(get_parent());
-				if (vt != nullptr) {
-					_parent = vt;
-					_parent_data_block_size_po2 = vt->get_data_block_size_pow2();
-					_parent_mesh_block_size_po2 = vt->get_mesh_block_size_pow2();
-					_mesh_lod_distance = vt->get_max_view_distance();
-					vt->set_instancer(this);
-				}
+			}
+			else if (vt != nullptr) 
+			{
+				_parent = vt;
+				_parent_data_block_size_po2 = vt->get_data_block_size_pow2();
+				_parent_mesh_block_size_po2 = vt->get_mesh_block_size_pow2();
+				_mesh_lod_distance = vt->get_max_view_distance();
+				vt->set_instancer(this);
+			}
+			else if (vcst != nullptr)
+			{
+				_parent = vcst;
+				_parent_data_block_size_po2 = vcst->get_data_block_size_pow2();
+				_parent_mesh_block_size_po2 = vcst->get_mesh_block_size_pow2();
+				_mesh_lod_distance = vcst->get_max_view_distance();
+				vcst->set_instancer(this);
 			}
 			// TODO may want to reload all instances? Not sure if worth implementing that use case
-		} break;
+			break;
+		}	
 
 		case NOTIFICATION_UNPARENTED:
+		{
 			clear_blocks();
-			if (_parent != nullptr) {
+			if (_parent != nullptr) 
+			{
 				VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_parent);
-				if (vlt != nullptr) {
+				VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(_parent);
+				VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(_parent);
+				
+				if (vlt != nullptr) 
+				{
 					vlt->set_instancer(nullptr);
-				} else {
-					VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(get_parent());
-					if (vt != nullptr) {
-						vt->set_instancer(nullptr);
-					}
+				} 
+				else if (vt != nullptr) 
+				{
+					vt->set_instancer(nullptr);
 				}
-				_parent = nullptr;
+				else if (vcst != nullptr)
+				{
+					vcst->set_instancer(nullptr);
+				}
 			}
+			_parent = nullptr;
+			
 			break;
-
+		}
 		case NOTIFICATION_TRANSFORM_CHANGED: {
 			ZN_PROFILE_SCOPE_NAMED("VoxelInstancer::NOTIFICATION_TRANSFORM_CHANGED");
 
@@ -532,15 +559,24 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 
 	const VoxelLodTerrain *parent_vlt = Object::cast_to<VoxelLodTerrain>(_parent);
 	const VoxelTerrain *parent_vt = Object::cast_to<VoxelTerrain>(_parent);
+	const VoxelCubeSphereTerrain *parent_vcst = Object::cast_to<VoxelCubeSphereTerrain>(_parent);
 
 	if (regenerate_blocks) {
 		// Create blocks
 		std::vector<Vector3i> positions;
 
-		if (parent_vlt != nullptr) {
+		if (parent_vlt != nullptr) 
+		{
 			parent_vlt->get_meshed_block_positions_at_lod(layer.lod_index, positions);
-		} else if (parent_vt != nullptr) {
+		} 
+		else if (parent_vt != nullptr) 
+		{
 			parent_vt->get_meshed_block_positions(positions);
+		}
+		else if (parent_vcst != nullptr)
+		{
+			parent_vcst->get_meshed_block_positions(positions);
+
 		}
 
 		for (unsigned int i = 0; i < positions.size(); ++i) {
@@ -625,10 +661,17 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 		transform_cache.clear();
 
 		Array surface_arrays;
-		if (parent_vlt != nullptr) {
+		if (parent_vlt != nullptr) 
+		{
 			surface_arrays = parent_vlt->get_mesh_block_surface(block.grid_position, lod_index);
-		} else if (parent_vt != nullptr) {
+		} 
+		else if (parent_vt != nullptr) 
+		{
 			surface_arrays = parent_vt->get_mesh_block_surface(block.grid_position);
+		}
+		else if (parent_vcst != nullptr) 
+		{
+			surface_arrays = parent_vcst->get_mesh_block_surface(block.grid_position);
 		}
 
 		const int mesh_block_size = 1 << _parent_mesh_block_size_po2;
