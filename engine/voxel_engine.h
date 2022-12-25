@@ -6,6 +6,7 @@
 #include "../util/file_locker.h"
 #include "../util/memory.h"
 #include "../util/struct_db.h"
+#include "../util/math/vector3d.h"
 #include "../util/tasks/progressive_task_runner.h"
 #include "../util/tasks/threaded_task_runner.h"
 #include "../util/tasks/time_spread_task_runner.h"
@@ -43,6 +44,8 @@ public:
 		std::vector<uint8_t> mesh_material_indices;
 		// In mesh block coordinates
 		Vector3i position;
+
+		Vector3d offset;
 		// TODO Rename lod_index
 		uint8_t lod;
 		// Tells if the mesh resource was built as part of the task. If not, you need to build it on the main thread.

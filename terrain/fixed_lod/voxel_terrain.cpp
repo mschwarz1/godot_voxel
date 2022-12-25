@@ -1549,7 +1549,7 @@ void VoxelTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutput &ob) {
 			// TODO The mesh could come from an edited region!
 			// We would have to know if specific voxels got edited, or different from the generator
 			// TODO Support multi-surfaces in VoxelInstancer
-			_instancer->on_mesh_block_enter(ob.position, ob.lod, ob.surfaces.surfaces[0].arrays);
+			_instancer->on_mesh_block_enter(ob.position, Vector3d(), ob.lod, ob.surfaces.surfaces[0].arrays);
 		}
 	}
 

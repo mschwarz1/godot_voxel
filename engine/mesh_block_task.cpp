@@ -401,6 +401,7 @@ void MeshBlockTask::apply_result() {
 			}
 
 			o.position = mesh_block_position;
+			o.offset = _surfaces_output.offset;
 			o.lod = lod_index;
 			o.surfaces = std::move(_surfaces_output);
 			o.mesh = _mesh;

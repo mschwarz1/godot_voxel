@@ -24,6 +24,7 @@ namespace zylann::voxel {
 class VoxelMeshBlock : public NonCopyable {
 public:
 	Vector3i position; // In blocks
+	Vector3d offset;
 
 protected:
 	VoxelMeshBlock(Vector3i bpos);

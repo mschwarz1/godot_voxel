@@ -113,6 +113,10 @@ inline Vector3i floor_to_int(const Vector3f &f) {
 	return Vector3i(Math::floor(f.x), Math::floor(f.y), Math::floor(f.z));
 }
 
+inline Vector3i floor_to_int(const Vector3d &f) {
+	return Vector3i(Math::floor(f.x), Math::floor(f.y), Math::floor(f.z));
+}
+
 inline Vector3i round_to_int(const Vector3 &f) {
 	return Vector3i(Math::round(f.x), Math::round(f.y), Math::round(f.z));
 }

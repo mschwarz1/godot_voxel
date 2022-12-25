@@ -41,6 +41,8 @@ public:
 	void set_mesher(Ref<VoxelMesher> mesher) override;
 	Ref<VoxelMesher> get_mesher() const override;
 
+	Vector3d CalculatePositionOffset(Vector3i voxPosition);
+
 	unsigned int get_data_block_size_pow2() const;
 	inline unsigned int get_data_block_size() const {
 		return 1 << get_data_block_size_pow2();
@@ -138,6 +140,8 @@ public:
 
 	void set_instancer(VoxelInstancer *instancer);
 	void get_meshed_block_positions(std::vector<Vector3i> &out_positions) const;
+	void get_meshed_block_offsets(std::vector<Vector3d> &out_offsets) const;
+
 	Array get_mesh_block_surface(Vector3i block_pos) const;
 
 	uint32_t get_volume_id() const override {

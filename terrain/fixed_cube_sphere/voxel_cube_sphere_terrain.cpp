@@ -35,6 +35,33 @@
 
 namespace zylann::voxel {
 
+
+Vector3d VoxelCubeSphereTerrain::CalculatePositionOffset(Vector3i origin)
+{
+
+	int curveRes = _data->get_bounds().size.x;
+	double minRadius = curveRes / 2.0;
+	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+	Vector3d totalPosition = originPosition;
+	Vector3d relativePosition = Vector3d(totalPosition.x / ((double)(curveRes)),
+			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+	// * (minRadius)) - originPosition; return actualCubePosition;
+
+	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	Vector3d offset = Vector3d((spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition); // + totalPosition.y);
+
+	//println(format("Origin: {}, {}, {}", origin.x, origin.y, origin.z));
+	//println(format("Offset: {}, {}, {}", offset.x, offset.y, offset.z));
+
+	return offset;
+}
+
+
+
 VoxelCubeSphereTerrain::VoxelCubeSphereTerrain() {
 	// Note: don't do anything heavy in the constructor.
 	// Godot may create and destroy dozens of instances of all node types on startup,
@@ -421,6 +448,7 @@ void VoxelCubeSphereTerrain::view_mesh_block(Vector3i bpos, bool mesh_flag, bool
 	if (block == nullptr) {
 		// Create if not found
 		block = memnew(VoxelMeshBlockVT(bpos, get_mesh_block_size()));
+		block->offset = CalculatePositionOffset(bpos * get_mesh_block_size());
 		block->set_world(get_world_3d());
 		_mesh_map.set_block(bpos, block);
 	}
@@ -519,6 +547,14 @@ void VoxelCubeSphereTerrain::get_meshed_block_positions(std::vector<Vector3i> &o
 	_mesh_map.for_each_block([&out_positions](const VoxelMeshBlock &mesh_block) {
 		if (mesh_block.has_mesh()) {
 			out_positions.push_back(mesh_block.position);
+		}
+	});
+}
+
+void VoxelCubeSphereTerrain::get_meshed_block_offsets(std::vector<Vector3d> &out_offsets) const {
+	_mesh_map.for_each_block([&out_offsets](const VoxelMeshBlock &mesh_block) {
+		if (mesh_block.has_mesh()) {
+			out_offsets.push_back(mesh_block.offset);
 		}
 	});
 }
@@ -938,6 +974,7 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 
 void VoxelCubeSphereTerrain::process() {
 	ZN_PROFILE_SCOPE();
+
 	process_viewers();
 	//process_received_data_blocks();
 	process_meshing();
@@ -1011,16 +1048,15 @@ void VoxelCubeSphereTerrain::process_viewers()
 				Vector3 direction = local_position.normalized();
 
 				// convert unit cube position to voxel position
-				Vector3f directionf = Vector3f(direction.x, direction.y, direction.z);
+				Vector3d directionf = Vector3d(direction.x, direction.y, direction.z);
 
-				Vector3f absDirection = Vector3f(abs(directionf.x), abs(directionf.y), abs(directionf.z));
-
-				if (absDirection.y > absDirection.x && absDirection.y > absDirection.z)
+				Vector3d absDirection = Vector3d(abs(directionf.x), abs(directionf.y), abs(directionf.z));
+				if ((absDirection.y > absDirection.x && absDirection.y > absDirection.z) && directionf.y > 0.0)
 				{
-					Vector3f cubified = math::cubify(directionf);
+					Vector3d cubified = math::cubify(directionf);
 					double curveRes = bounds_in_voxels.size.x;
 					double radius = curveRes / 2.0;
-					Vector3f percentage = Vector3f((cubified.x / 2.0) + .5f, cubified.y, (cubified.z / 2.0) + .5f);
+					Vector3d percentage = Vector3d((cubified.x / 2.0) + .5f, cubified.y, (cubified.z / 2.0) + .5f);
 
 					if (percentage.x >= 1.0 || percentage.x < 0.0)
 					{
@@ -1032,7 +1068,7 @@ void VoxelCubeSphereTerrain::process_viewers()
 						percentage.z = -1000.0;
 					}
 
-					Vector3f voxelPosition = Vector3f(percentage.x * curveRes, distance - radius, percentage.z * curveRes);
+					Vector3d voxelPosition = Vector3d(percentage.x * curveRes, distance - radius, percentage.z * curveRes);
 
 					if (voxelPosition.y < 0) {
 						voxelPosition.y = -10000000;
@@ -1486,6 +1522,8 @@ bool VoxelCubeSphereTerrain::has_data_block(Vector3i position) const {
 	return _data->has_block(position, 0);
 }
 
+
+
 void VoxelCubeSphereTerrain::process_meshing() {
 	ZN_PROFILE_SCOPE();
 	ProfilingClock profiling_clock;
@@ -1528,6 +1566,7 @@ void VoxelCubeSphereTerrain::process_meshing() {
 		MeshBlockTask *task = ZN_NEW(MeshBlockTask);
 		task->volume_id = _volume_id;
 		task->mesh_block_position = mesh_block_pos;
+		task->mesh_block_position_offset = CalculatePositionOffset(mesh_block_pos * get_mesh_block_size());
 		task->lod_index = 0;
 		task->meshing_dependency = _meshing_dependency;
 		task->data_block_size = get_data_block_size();
@@ -1627,7 +1666,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 			// TODO The mesh could come from an edited region!
 			// We would have to know if specific voxels got edited, or different from the generator
 			// TODO Support multi-surfaces in VoxelInstancer
-			_instancer->on_mesh_block_enter(ob.position, ob.lod, ob.surfaces.surfaces[0].arrays);
+			_instancer->on_mesh_block_enter(ob.position, ob.offset, ob.lod, ob.surfaces.surfaces[0].arrays);
 		}
 	}
 

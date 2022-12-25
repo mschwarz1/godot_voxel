@@ -31,6 +31,7 @@ void GenerateInstancesBlockTask::run(ThreadedTaskContext ctx) {
 		VoxelInstanceGeneratorTaskOutput &o = output_queue->results.back();
 		o.layer_id = layer_id;
 		o.render_block_position = mesh_block_grid_position;
+		o.render_block_offset = mesh_block_offset;
 		o.transforms = std::move(transforms);
 	}
 }

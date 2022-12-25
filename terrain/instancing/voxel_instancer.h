@@ -7,6 +7,7 @@
 #include "../../util/godot/direct_multimesh_instance.h"
 #include "../../util/godot/node_3d.h"
 #include "../../util/math/box3i.h"
+#include "../../util/math/vector3d.h"
 #include "../../util/memory.h"
 #include "generate_instances_block_task.h"
 #include "voxel_instance_generator.h"
@@ -38,6 +39,7 @@ class VoxelInstanceLibrarySceneItem;
 class VoxelTool;
 class SaveBlockDataTask;
 class BufferedTaskScheduler;
+class VoxelCubeSphereTerrain;
 
 // Note: a large part of this node could be made generic to support the sole idea of instancing within octants?
 // Even nodes like gridmaps could be rebuilt on top of this, if its concept of "grid" was decoupled.
@@ -74,7 +76,7 @@ public:
 	// Event handlers
 
 	void on_data_block_loaded(Vector3i grid_position, unsigned int lod_index, UniquePtr<InstanceBlockData> instances);
-	void on_mesh_block_enter(Vector3i render_grid_position, unsigned int lod_index, Array surface_arrays);
+	void on_mesh_block_enter(Vector3i render_grid_position, Vector3d mesh_block_offset, unsigned int lod_index, Array surface_arrays);
 	void on_mesh_block_exit(Vector3i render_grid_position, unsigned int lod_index);
 	void on_area_edited(Box3i p_voxel_box);
 	void on_body_removed(Vector3i data_block_position, unsigned int render_block_index, unsigned int instance_index);
@@ -130,7 +132,7 @@ private:
 
 	void add_layer(int layer_id, int lod_index);
 	void remove_layer(int layer_id);
-	unsigned int create_block(Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances);
+	unsigned int create_block(Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances, VoxelCubeSphereTerrain* cubeSphere);
 	void remove_block(unsigned int block_index);
 	void set_world(World3D *world);
 	void clear_blocks();
@@ -147,7 +149,7 @@ private:
 	void regenerate_layer(uint16_t layer_id, bool regenerate_blocks);
 	void update_layer_meshes(int layer_id);
 	void update_layer_scenes(int layer_id);
-	void create_render_blocks(Vector3i grid_position, int lod_index, Array surface_arrays);
+	void create_render_blocks(Vector3i grid_position, Vector3d block_position_offset, int lod_index, Array surface_arrays);
 
 #ifdef TOOLS_ENABLED
 	void process_gizmos();
@@ -190,6 +192,8 @@ private:
 		bool pending_instances = false;
 		// Position in mesh block coordinate system
 		Vector3i grid_position;
+		Vector3d offset;
+
 		DirectMultiMeshInstance multimesh_instance;
 		// For physics we use nodes because it's easier to manage.
 		// Such instances may be less numerous.

@@ -1456,7 +1456,7 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 		if (_instancer != nullptr && ob.surfaces.surfaces.size() > 0) {
 			// TODO The mesh could come from an edited region!
 			// We would have to know if specific voxels got edited, or different from the generator
-			_instancer->on_mesh_block_enter(ob.position, ob.lod, ob.surfaces.surfaces[0].arrays);
+			_instancer->on_mesh_block_enter(ob.position, Vector3d(), ob.lod, ob.surfaces.surfaces[0].arrays);
 		}
 
 		// Lazy initialization

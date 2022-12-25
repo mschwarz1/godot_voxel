@@ -5,6 +5,7 @@
 #include "../../util/godot/funcs.h"
 #include "../../util/macros.h"
 #include "../../util/math/conv.h"
+#include "../../util/math/vector3d.h"
 #include "../../util/span.h"
 // TODO GDX: String has no `operator+=`
 #include "../../util/godot/string.h"
@@ -22,26 +23,19 @@ const int g_opposite_side[6] = {
 	Cube::SIDE_NEGATIVE_Z //
 };
 
-inline bool is_on_edge(Vector3i voxPos, int curveMax)
-{
-	if (voxPos.x == 0 || /*voxPos.y == 0 ||*/ voxPos.z == 0)
-	{
+inline bool is_on_edge(Vector3i voxPos, int curveMax) {
+	if (voxPos.x == 0 || /*voxPos.y == 0 ||*/ voxPos.z == 0) {
 		return true;
-	}
-	else if (voxPos.x >= (curveMax - 1) || /*voxPos.y >= (curveMax - 1) ||*/ voxPos.z >= (curveMax - 1))
-	{
+	} else if (voxPos.x >= (curveMax - 1) || /*voxPos.y >= (curveMax - 1) ||*/ voxPos.z >= (curveMax - 1)) {
 		return true;
 	}
 
 	return false;
 }
 
-inline bool is_face_visible(const VoxelBlockyLibrary::BakedData &lib, 
-							const VoxelBlockyModel::BakedData &vt,
-							uint32_t other_voxel_id, int side, Vector3i voxPos, int curveMax) 
-{
-	if (other_voxel_id < lib.models.size()) 
-	{
+inline bool is_face_visible(const VoxelBlockyLibrary::BakedData &lib, const VoxelBlockyModel::BakedData &vt,
+		uint32_t other_voxel_id, int side, Vector3i voxPos, int curveMax) {
+	if (other_voxel_id < lib.models.size()) {
 		const VoxelBlockyModel::BakedData &other_vt = lib.models[other_voxel_id];
 		if (other_vt.empty || (other_vt.transparency_index > vt.transparency_index)) {
 			return true;
@@ -51,16 +45,15 @@ inline bool is_face_visible(const VoxelBlockyLibrary::BakedData &lib,
 			// Patterns are not the same, and B does not occlude A
 			bool patAndOcclusion = ((ai != bi) && !lib.get_side_pattern_occlusion(bi, ai));
 
-			if (!patAndOcclusion)
-			{
-			    if (is_on_edge(voxPos, curveMax))
-				{
+			if (!patAndOcclusion) {
+				if (is_on_edge(voxPos, curveMax)) {
 					return true;
 				}
 			}
 			return patAndOcclusion;
 		}
 	}
+	return true;
 }
 
 inline bool contributes_to_ao(const VoxelBlockyLibrary::BakedData &lib, uint32_t voxel_id) {
@@ -76,52 +69,71 @@ std::vector<int> &get_tls_index_offsets() {
 	return tls_index_offsets;
 }
 
-Vector3 PointOnCubeToPointOnSphere(Vector3 p)
-{
-        double x2 = p.x * p.x;
-        double y2 = p.y * p.y;
-        double z2 = p.z * p.z;
+Vector3 PointOnCubeToPointOnSphere(Vector3 p) {
+	double x2 = p.x * p.x;
+	double y2 = p.y * p.y;
+	double z2 = p.z * p.z;
 
-        double x = p.x * sqrt(1.0 - (y2 + z2) / 2.0 + (y2 * z2) / 3.0);
-        double y = p.y * sqrt(1.0 - (z2 + x2) / 2.0 + (z2 * x2) / 3.0);
-        double z = p.z * sqrt(1.0 - (x2 + y2) / 2.0 + (x2 * y2) / 3.0);
+	double x = p.x * sqrt(1.0 - (y2 + z2) / 2.0 + (y2 * z2) / 3.0);
+	double y = p.y * sqrt(1.0 - (z2 + x2) / 2.0 + (z2 * x2) / 3.0);
+	double z = p.z * sqrt(1.0 - (x2 + y2) / 2.0 + (x2 * y2) / 3.0);
 
-        return Vector3(x, y, z);
+	return Vector3(x, y, z);
 }
 
-Vector3f CalculateNorm(Vector3f normNorm, Vector3f sidePosition, Vector3f voxelPosition, Vector3i origin, int curveRes, int heightRes) 
-{
+Vector3f CalculateNorm(Vector3f normNorm, Vector3f sidePosition, Vector3f voxelPosition, Vector3i origin, int curveRes,
+		int heightRes) {
 	double minRadius = curveRes / 2.0;
 	Vector3f originPosition = Vector3f(origin.x, origin.y, origin.z);
 	Vector3f totalPosition = sidePosition + voxelPosition + originPosition;
-	Vector3f relativePosition = Vector3f(totalPosition.x / ((float)(curveRes)), 1.0/*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((float)(curveRes)));
+	Vector3f relativePosition = Vector3f(totalPosition.x / ((float)(curveRes)),
+			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((float)(curveRes)));
 
 	Vector3f cubePosition = Vector3f((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
-	//Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z * (minRadius));
-	//return actualCubePosition;
+	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+	// * (minRadius)); return actualCubePosition;
 
-	Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+	Vector3f spherePoint = math::normalized(cubePosition); // PointOnCubeToPointOnSphere(cubePosition);
 	Vector3f newUp = spherePoint;
 
-
-
-	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition;// + totalPosition.y);
+	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
 }
 
-Vector3f CalculateVertPosition(Vector3f sidePosition, Vector3f voxelPosition, Vector3i origin, int curveRes, int heightRes) 
+Vector3d CalculateVertOffset(Vector3i origin, int curveRes) 
 {
 	double minRadius = curveRes / 2.0;
-	Vector3f originPosition = Vector3f(origin.x, origin.y, origin.z);
-	Vector3f totalPosition = sidePosition + voxelPosition + originPosition;
-	Vector3f relativePosition = Vector3f(totalPosition.x / ((double)(curveRes)), 1.0/*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
+	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+	Vector3d totalPosition = originPosition;
+	Vector3d relativePosition = Vector3d(totalPosition.x / ((double)(curveRes)),
+			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
 
-	Vector3f cubePosition = Vector3f((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
-	//Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z * (minRadius)) - originPosition;
-	//return actualCubePosition;
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+	// * (minRadius)) - originPosition; return actualCubePosition;
 
-	//Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
-	Vector3f spherePoint = math::spherify(cubePosition);
-	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition;// + totalPosition.y);
+	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
+}
+
+
+Vector3d CalculateVertPosition(
+		Vector3f sidePosition, Vector3f voxelPosition, Vector3i origin, int curveRes, int heightRes) {
+	double minRadius = curveRes / 2.0;
+	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+	Vector3d voxPosition = Vector3d(voxelPosition.x, voxelPosition.y, voxelPosition.z);
+	Vector3d sidePositiond = Vector3d(sidePosition.x, sidePosition.y, sidePosition.z);
+	Vector3d totalPosition = sidePositiond + voxPosition + originPosition;
+	Vector3d relativePosition = Vector3d(totalPosition.x / ((double)(curveRes)),
+			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+	// * (minRadius)) - originPosition; return actualCubePosition;
+
+	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
 }
 
 } // namespace
@@ -130,8 +142,7 @@ template <typename Type_T>
 void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_arrays_per_material,
 		VoxelMesher::Output::CollisionSurface *collision_surface, const Span<Type_T> type_buffer,
 		const Vector3i block_size, const VoxelBlockyLibrary::BakedData &library, bool bake_occlusion,
-		float baked_occlusion_darkness, int curveRes, int heightRes, Vector3i origin) 
-{
+		float baked_occlusion_darkness, int curveRes, int heightRes, Vector3i origin, Vector3d offset) {
 	// TODO Optimization: not sure if this mandates a template function. There is so much more happening in this
 	// function other than reading voxels, although reading is on the hottest path. It needs to be profiled. If
 	// changing makes no difference, we could use a function pointer or switch inside instead to reduce executable size.
@@ -209,8 +220,8 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 	corner_neighbor_lut[Cube::CORNER_TOP_FRONT_LEFT] = side_neighbor_lut[Cube::SIDE_TOP] +
 			side_neighbor_lut[Cube::SIDE_FRONT] + side_neighbor_lut[Cube::SIDE_LEFT];
 
-	//uint64_t time_prep = Time::get_singleton()->get_ticks_usec() - time_before;
-	//time_before = Time::get_singleton()->get_ticks_usec();
+	// uint64_t time_prep = Time::get_singleton()->get_ticks_usec() - time_before;
+	// time_before = Time::get_singleton()->get_ticks_usec();
 
 	for (unsigned int z = min.z; z < (unsigned int)max.z; ++z) {
 		for (unsigned int x = min.x; x < (unsigned int)max.x; ++x) {
@@ -305,7 +316,8 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 							arrays.positions.resize(arrays.positions.size() + vertex_count);
 							Vector3f *w = arrays.positions.data() + append_index;
 							for (unsigned int i = 0; i < vertex_count; ++i) {
-								w[i] = CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes);
+							Vector3d vertPos = CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes) -	offset;
+								w[i] = Vector3f(vertPos.x, vertPos.y, vertPos.z);
 								sideVertPositions.push_back(w[i]);
 							}
 						}
@@ -322,8 +334,6 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 							memcpy(arrays.tangents.data() + append_index, side_tangents.data(),
 									(vertex_count * 4) * sizeof(float));
 						}
-
-
 
 						{
 							const int append_index = arrays.colors.size();
@@ -345,7 +355,7 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 										if (shaded_corner[corner]) {
 											float s = baked_occlusion_darkness *
 													static_cast<float>(shaded_corner[corner]);
-											//float k = 1.f - Cube::g_corner_position[corner].distance_to(v);
+											// float k = 1.f - Cube::g_corner_position[corner].distance_to(v);
 											float k = 1.f -
 													math::distance_squared(Cube::g_corner_position[corner], vertex_pos);
 											if (k < 0.0) {
@@ -381,7 +391,6 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 						}
 
 						{
-							
 							const int append_index = arrays.normals.size();
 							arrays.normals.resize(arrays.normals.size() + vertex_count);
 							Vector3f *w = arrays.normals.data() + append_index;
@@ -391,19 +400,17 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 							Vector3f p2 = sideVertPositions[side_indices[2]];
 
 							Vector3f side1 = p1 - p0;
-                			Vector3f side2 = p2 - p0;
- 
-                			Vector3f triangleNormal = math::normalized(math::cross(side1, side2));
+							Vector3f side2 = p2 - p0;
 
-							Vector3f norm = to_vec3f(Cube::g_side_normals[side]);//CalculateNorm();
+							Vector3f triangleNormal = math::normalized(math::cross(side1, side2));
 
-							
+							Vector3f norm = to_vec3f(Cube::g_side_normals[side]); // CalculateNorm();
+
 							for (unsigned int i = 0; i < vertex_count; ++i) {
-								//w[i] = CalculateNorm(side_positions[i], pos, origin, curveRes, heightRes);
+								// w[i] = CalculateNorm(side_positions[i], pos, origin, curveRes, heightRes);
 
 								w[i] = -triangleNormal;
 							}
-							
 						}
 
 						if (collision_surface != nullptr && surface.collision_enabled) {
@@ -415,7 +422,10 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 								dst_positions.resize(dst_positions.size() + vertex_count);
 								Vector3f *w = dst_positions.data() + append_index;
 								for (unsigned int i = 0; i < vertex_count; ++i) {
-									w[i] = CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes);
+									Vector3d vertPos =
+											CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes) -
+											offset;
+									w[i] = Vector3f(vertPos.x, vertPos.y, vertPos.z);
 								}
 							}
 
@@ -432,7 +442,6 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 						}
 
 						index_offset += vertex_count;
-
 					}
 				}
 
@@ -469,7 +478,8 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 					for (unsigned int i = 0; i < vertex_count; ++i) {
 						arrays.normals.push_back(normals[i]);
 						arrays.uvs.push_back(uvs[i]);
-						arrays.positions.push_back(CalculateVertPosition(positions[i], pos, origin, curveRes, heightRes));
+						Vector3d vertPos = CalculateVertPosition(positions[i], pos, origin, curveRes, heightRes) - offset;
+						arrays.positions.push_back(Vector3f(vertPos.x, vertPos.y, vertPos.z));
 						// TODO handle ambient occlusion on inner parts
 						arrays.colors.push_back(modulate_color);
 					}
@@ -486,7 +496,8 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 						std::vector<int> &dst_indices = collision_surface->indices;
 
 						for (unsigned int i = 0; i < vertex_count; ++i) {
-							dst_positions.push_back(CalculateVertPosition(positions[i], pos, origin, curveRes, heightRes));
+							Vector3d vertPos = CalculateVertPosition(positions[i], pos, origin, curveRes, heightRes) - offset;
+							dst_positions.push_back(Vector3f(vertPos.x, vertPos.y, vertPos.z));
 						}
 						for (unsigned int i = 0; i < index_count; ++i) {
 							dst_indices.push_back(collision_surface_index_offset + indices[i]);
@@ -500,7 +511,6 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 			}
 		}
 	}
-	
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -508,7 +518,6 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 VoxelMesherCubeSphereBlocky::VoxelMesherCubeSphereBlocky() {}
 
 VoxelMesherCubeSphereBlocky::~VoxelMesherCubeSphereBlocky() {}
-
 
 void VoxelMesherCubeSphereBlocky::build(VoxelMesher::Output &output, const VoxelMesher::Input &input) {
 	const int channel = VoxelBufferInternal::CHANNEL_TYPE;
@@ -594,6 +603,9 @@ void VoxelMesherCubeSphereBlocky::build(VoxelMesher::Output &output, const Voxel
 		collision_surface = &output.collision_surface;
 	}
 
+	Vector3d offset = CalculateVertOffset(input.origin_in_voxels, curveRes);
+
+
 	unsigned int material_count = 0;
 	{
 		// We can only access baked data. Only this data is made for multithreaded access.
@@ -609,13 +621,14 @@ void VoxelMesherCubeSphereBlocky::build(VoxelMesher::Output &output, const Voxel
 		switch (channel_depth) {
 			case VoxelBufferInternal::DEPTH_8_BIT:
 				generate_blocky_mesh(arrays_per_material, collision_surface, raw_channel, block_size,
-						library_baked_data, params.bake_occlusion, baked_occlusion_darkness, curveRes, 512, input.origin_in_voxels);
+						library_baked_data, params.bake_occlusion, baked_occlusion_darkness, curveRes, 512,
+						input.origin_in_voxels, offset);
 				break;
 
 			case VoxelBufferInternal::DEPTH_16_BIT:
 				generate_blocky_mesh(arrays_per_material, collision_surface,
 						raw_channel.reinterpret_cast_to<uint16_t>(), block_size, library_baked_data,
-						params.bake_occlusion, baked_occlusion_darkness, curveRes, 512, input.origin_in_voxels);
+						params.bake_occlusion, baked_occlusion_darkness, curveRes, 512, input.origin_in_voxels, offset);
 				break;
 
 			default:
@@ -661,7 +674,7 @@ void VoxelMesherCubeSphereBlocky::build(VoxelMesher::Output &output, const Voxel
 				}
 				*/
 			}
-
+			output.offset = offset;
 			output.surfaces.push_back(Output::Surface());
 			Output::Surface &surface = output.surfaces.back();
 			surface.arrays = mesh_arrays;
@@ -686,18 +699,15 @@ int VoxelMesherCubeSphereBlocky::get_curvature() {
 	return curveRes;
 }
 
-Ref<Resource> VoxelMesherCubeSphereBlocky::duplicate(bool p_subresources) const 
-{
+Ref<Resource> VoxelMesherCubeSphereBlocky::duplicate(bool p_subresources) const {
 	return VoxelMesherBlocky::duplicate(p_subresources);
 }
 
-void VoxelMesherCubeSphereBlocky::_bind_methods() 
-{
+void VoxelMesherCubeSphereBlocky::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_curvature", "newRes"), &VoxelMesherCubeSphereBlocky::set_curvature);
 	ClassDB::bind_method(D_METHOD("get_curvature"), &VoxelMesherCubeSphereBlocky::get_curvature);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "maxCurve"), "set_curvature", "get_curvature");
-
 }
 
 } // namespace zylann::voxel

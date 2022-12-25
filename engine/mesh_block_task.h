@@ -31,6 +31,7 @@ public:
 	// TODO Need to provide format
 	// FixedArray<uint8_t, VoxelBufferInternal::MAX_CHANNELS> channel_depths;
 	Vector3i mesh_block_position; // In mesh blocks of the specified lod
+	Vector3d mesh_block_position_offset; // In mesh blocks of the specified lod
 	uint32_t volume_id;
 	uint8_t lod_index = 0;
 	uint8_t blocks_count = 0;

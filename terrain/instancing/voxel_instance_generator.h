@@ -6,6 +6,7 @@
 #include "../../util/godot/noise.h"
 #include "../../util/math/transform3f.h"
 #include "../../util/math/vector3i.h"
+#include "../../util/math/vector3d.h"
 
 #include <limits>
 #include <vector>

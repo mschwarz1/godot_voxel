@@ -5,6 +5,7 @@
 #include "../util/fixed_array.h"
 #include "../util/godot/image.h"
 #include "../util/godot/mesh.h"
+#include "../util/math/vector3d.h"
 #include "../util/macros.h"
 #include "../util/span.h"
 #include <vector>
@@ -58,7 +59,7 @@ public:
 		Mesh::PrimitiveType primitive_type = Mesh::PRIMITIVE_TRIANGLES;
 		// Flags for creating the Godot mesh resource
 		uint32_t mesh_flags = 0;
-
+		Vector3d offset;
 		struct CollisionSurface {
 			std::vector<Vector3f> positions;
 			std::vector<int> indices;

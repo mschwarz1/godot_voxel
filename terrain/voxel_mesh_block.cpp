@@ -5,6 +5,8 @@
 #include "../util/godot/node_3d.h"
 #include "../util/macros.h"
 #include "../util/profiling.h"
+#include "../util/string_funcs.h"
+
 #include "free_mesh_task.h"
 
 namespace zylann::voxel {
@@ -114,7 +116,9 @@ void VoxelMeshBlock::set_parent_transform(const Transform3D &parent_transform) {
 	ZN_PROFILE_SCOPE();
 
 	if (_mesh_instance.is_valid() || _static_body.is_valid()) {
-		const Transform3D local_transform(Basis(), _position_in_voxels);
+
+		Vector3 localPos = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+		const Transform3D local_transform(Basis(), localPos);
 		const Transform3D world_transform = parent_transform * local_transform;
 
 		if (_mesh_instance.is_valid()) {

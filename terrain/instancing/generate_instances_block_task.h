@@ -9,6 +9,7 @@ namespace zylann::voxel {
 
 struct VoxelInstanceGeneratorTaskOutput {
 	Vector3i render_block_position;
+	Vector3d render_block_offset;
 	uint16_t layer_id;
 	std::vector<Transform3f> transforms;
 };
@@ -22,6 +23,7 @@ struct VoxelInstancerGeneratorTaskOutputQueue {
 class GenerateInstancesBlockTask : public IThreadedTask {
 public:
 	Vector3i mesh_block_grid_position;
+	Vector3d mesh_block_offset;
 	uint16_t layer_id;
 	uint8_t lod_index;
 	uint8_t gen_octant_mask;
