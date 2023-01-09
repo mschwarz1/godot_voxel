@@ -68,7 +68,7 @@ void VoxelViewer::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			if (!Engine::get_singleton()->is_editor_hint()) {
-				_viewer_id = VoxelEngine::get_singleton().add_viewer();
+				_viewer_id = VoxelEngine::get_singleton().add_viewer(this);
 				VoxelEngine::get_singleton().set_viewer_distance(_viewer_id, _view_distance);
 				VoxelEngine::get_singleton().set_viewer_requires_visuals(_viewer_id, _requires_visuals);
 				VoxelEngine::get_singleton().set_viewer_requires_collisions(_viewer_id, _requires_collisions);

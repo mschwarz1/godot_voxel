@@ -23,6 +23,14 @@ void println(const char *cstr) {
 #endif
 }
 
+void println(const char32_t *cstr) {
+#if defined(ZN_GODOT)
+	print_line(cstr);
+#elif defined(ZN_GODOT_EXTENSION)
+	godot::UtilityFunctions::print(cstr);
+#endif
+}
+
 void println(const FwdConstStdString &s) {
 	println(s.s.c_str());
 }

@@ -78,7 +78,7 @@ void VoxelTerrainEditorPlugin::generate_menu_items(MenuButton *menu_button, bool
 void VoxelTerrainEditorPlugin::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE:
-			_editor_viewer_id = VoxelEngine::get_singleton().add_viewer();
+			_editor_viewer_id = VoxelEngine::get_singleton().add_viewer(nullptr);
 			VoxelEngine::get_singleton().set_viewer_distance(_editor_viewer_id, 512);
 			// No collision needed in editor, also it updates faster without
 			VoxelEngine::get_singleton().set_viewer_requires_collisions(_editor_viewer_id, false);

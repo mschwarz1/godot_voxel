@@ -32,6 +32,9 @@ public:
 	VoxelCubeSphereTerrain();
 	~VoxelCubeSphereTerrain();
 
+	Vector3i currentVoxPosition;
+
+
 	void set_stream(Ref<VoxelStream> p_stream) override;
 	Ref<VoxelStream> get_stream() const override;
 
@@ -83,6 +86,10 @@ public:
 
 	void set_automatic_loading_enabled(bool enable);
 	bool is_automatic_loading_enabled() const;
+
+	void set_debug(bool debugEnabled);
+	bool get_debug() const;
+
 
 	void set_material_override(Ref<Material> material);
 	Ref<Material> get_material_override() const;
@@ -301,6 +308,7 @@ private:
 	VoxelInstancer *_instancer = nullptr;
 
 	Stats _stats;
+	bool _debug;
 };
 
 } // namespace voxel

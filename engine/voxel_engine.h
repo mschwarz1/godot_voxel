@@ -22,6 +22,8 @@ ZN_GODOT_FORWARD_DECLARE(class RenderingDevice);
 
 namespace zylann::voxel {
 
+class VoxelViewer;
+
 // Singleton for common things, notably the task system and shared viewers list.
 // In Godot terminology this used to be called a "server", but I dont really agree with the term here, and it can be
 // confused with networking features.
@@ -111,6 +113,7 @@ public:
 		bool require_visuals = true;
 		bool requires_data_block_notifications = false;
 		int network_peer_id = -1;
+		VoxelViewer* viewerRef;
 	};
 
 	struct ThreadsConfig {
@@ -135,7 +138,7 @@ public:
 		return _world.shared_priority_dependency;
 	}
 
-	uint32_t add_viewer();
+	uint32_t add_viewer(VoxelViewer* ref);
 	void remove_viewer(uint32_t viewer_id);
 	void set_viewer_position(uint32_t viewer_id, Vector3 position);
 	void set_viewer_distance(uint32_t viewer_id, unsigned int distance);

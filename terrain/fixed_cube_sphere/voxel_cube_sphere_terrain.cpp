@@ -29,16 +29,14 @@
 #include "../instancing/voxel_instancer.h"
 #include "../voxel_data_block_enter_info.h"
 #include "../voxel_save_completion_tracker.h"
+#include "../voxel_viewer.h"
 #ifdef TOOLS_ENABLED
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
 #endif
 
 namespace zylann::voxel {
 
-
-Vector3d VoxelCubeSphereTerrain::CalculatePositionOffset(Vector3i origin)
-{
-
+Vector3d VoxelCubeSphereTerrain::CalculatePositionOffset(Vector3i origin) {
 	int curveRes = _data->get_bounds().size.x;
 	double minRadius = curveRes / 2.0;
 	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
@@ -52,15 +50,14 @@ Vector3d VoxelCubeSphereTerrain::CalculatePositionOffset(Vector3i origin)
 
 	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
 	Vector3d spherePoint = math::spherify(cubePosition);
-	Vector3d offset = Vector3d((spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition); // + totalPosition.y);
+	Vector3d offset =
+			Vector3d((spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition); // + totalPosition.y);
 
-	//println(format("Origin: {}, {}, {}", origin.x, origin.y, origin.z));
-	//println(format("Offset: {}, {}, {}", offset.x, offset.y, offset.z));
+	// println(format("Origin: {}, {}, {}", origin.x, origin.y, origin.z));
+	// println(format("Offset: {}, {}, {}", offset.x, offset.y, offset.z));
 
 	return offset;
 }
-
-
 
 VoxelCubeSphereTerrain::VoxelCubeSphereTerrain() {
 	// Note: don't do anything heavy in the constructor.
@@ -257,7 +254,7 @@ void VoxelCubeSphereTerrain::set_mesh_block_size(unsigned int mesh_block_size) {
 	// VoxelEngine::get_singleton().set_volume_render_block_size(_volume_id, mesh_block_size);
 
 	// No update on bounds because we can support a mismatch, as long as it is a multiple of data block size
-	//set_bounds(_bounds_in_voxels);
+	// set_bounds(_bounds_in_voxels);
 }
 
 void VoxelCubeSphereTerrain::restart_stream() {
@@ -917,7 +914,7 @@ void VoxelCubeSphereTerrain::consume_block_data_save_requests(
 		saving_tracker->set_count(task_scheduler.get_io_count());
 	}
 
-	//print_line(String("Sending {0} block requests").format(varray(input.blocks_to_emerge.size())));
+	// print_line(String("Sending {0} block requests").format(varray(input.blocks_to_emerge.size())));
 	_blocks_to_save.clear();
 }
 
@@ -929,8 +926,8 @@ void VoxelCubeSphereTerrain::emit_data_block_loaded(Vector3i bpos) {
 	// them). It isn't planned to expose VoxelBuffer locks because there are too many of them, it may likely shift
 	// to another system in the future, and might even be changed to no longer inherit Reference. So unless this is
 	// absolutely necessary, buffers aren't exposed. Workaround: use VoxelTool
-	//const Variant vbuffer = block->voxels;
-	//const Variant *args[2] = { &vpos, &vbuffer };
+	// const Variant vbuffer = block->voxels;
+	// const Variant *args[2] = { &vpos, &vbuffer };
 	emit_signal(VoxelStringNames::get_singleton().block_loaded, bpos);
 }
 
@@ -976,12 +973,11 @@ void VoxelCubeSphereTerrain::process() {
 	ZN_PROFILE_SCOPE();
 
 	process_viewers();
-	//process_received_data_blocks();
+	// process_received_data_blocks();
 	process_meshing();
 }
 
-void VoxelCubeSphereTerrain::process_viewers() 
-{
+void VoxelCubeSphereTerrain::process_viewers() {
 	ProfilingClock profiling_clock;
 
 	// Ordered by ascending index in paired viewers list
@@ -1005,8 +1001,8 @@ void VoxelCubeSphereTerrain::process_viewers()
 			}
 		}
 
-		const Transform3D local_to_world_transform = get_global_transform();
-		const Transform3D world_to_local_transform = local_to_world_transform.affine_inverse();
+		const Transform3D world_transform = get_global_transform();
+		const Transform3D world_to_local_transform = world_transform.affine_inverse();
 
 		// Note, this does not support non-uniform scaling
 		// TODO There is probably a better way to do this
@@ -1022,11 +1018,12 @@ void VoxelCubeSphereTerrain::process_viewers()
 			const Box3i bounds_in_data_blocks;
 			const Box3i bounds_in_mesh_blocks;
 			const Box3i bounds_in_voxels;
+			const Transform3D world_transform;
 			const Transform3D world_to_local_transform;
 			const float view_distance_scale;
+			const bool _debug;
 
-			inline void operator()(const VoxelEngine::Viewer &viewer, uint32_t viewer_id) 
-			{
+			inline void operator()(const VoxelEngine::Viewer &viewer, uint32_t viewer_id) {
 				size_t paired_viewer_index;
 				if (!self.try_get_paired_viewer_index(viewer_id, paired_viewer_index)) {
 					PairedViewer p;
@@ -1041,45 +1038,91 @@ void VoxelCubeSphereTerrain::process_viewers()
 
 				const unsigned int view_distance_voxels =
 						static_cast<unsigned int>(static_cast<float>(viewer.view_distance) * view_distance_scale);
-				const Vector3 local_position = world_to_local_transform.xform(viewer.world_position);
 
+				const Vector3 local_position = world_to_local_transform.xform(viewer.world_position);
+				/*
+				Vector3 local_position = Vector3();
+				if (viewer.viewerRef != nullptr)
+				{
+					local_position = viewer.viewerRef->get_parent_node_3d()->get_position();
+				}
+				else
+				{
+					local_position = self.get_global_transform().affine_inverse().xform(viewer.world_position);
+				}
+				*/
+				/*
+				if (viewer.viewerRef != nullptr)
+				{
+					println(format("Local Position: {}, {}, {}", local_position.x, local_position.y, local_position.z));
+				}
+				*/
 				// convert local_position to unit cube position
 				double distance = local_position.length();
 				Vector3 direction = local_position.normalized();
 
 				// convert unit cube position to voxel position
-				Vector3d directionf = Vector3d(direction.x, direction.y, direction.z);
+				Vector3d directionf = math::normalized(Vector3d(direction.x, direction.y, direction.z));
 
 				Vector3d absDirection = Vector3d(abs(directionf.x), abs(directionf.y), abs(directionf.z));
-				if ((absDirection.y > absDirection.x && absDirection.y > absDirection.z) && directionf.y > 0.0)
-				{
+				if ((absDirection.y > absDirection.x && absDirection.y > absDirection.z) && directionf.y > 0.0) {
 					Vector3d cubified = math::cubify(directionf);
+					bool hitProb = false;
+					if (isnan(cubified.x))
+					{
+						cubified.x = 0.0;
+						hitProb = true;
+					}
+
+					if (isnan(cubified.z))
+					{
+						cubified.z = 0.0;
+						hitProb = true;
+					}
+
 					double curveRes = bounds_in_voxels.size.x;
 					double radius = curveRes / 2.0;
 					Vector3d percentage = Vector3d((cubified.x / 2.0) + .5f, cubified.y, (cubified.z / 2.0) + .5f);
 
-					if (percentage.x >= 1.0 || percentage.x < 0.0)
-					{
+					/*
+					if (percentage.x >= 1.0 || percentage.x < 0.0) {
 						percentage.x = -1000.0;
 					}
 
-					if (percentage.z >= 1.0 || percentage.z < 0.0)
-					{
+					if (percentage.z >= 1.0 || percentage.z < 0.0) {
 						percentage.z = -1000.0;
 					}
+					*/
 
-					Vector3d voxelPosition = Vector3d(percentage.x * curveRes, distance - radius, percentage.z * curveRes);
+					Vector3d voxelPosition =
+							Vector3d(percentage.x * curveRes, distance - radius, percentage.z * curveRes);
 
 					if (voxelPosition.y < 0) {
 						voxelPosition.y = -10000000;
 					}
 
-
 					state.view_distance_voxels = math::min(view_distance_voxels, self._max_view_distance_voxels);
 					state.local_position_voxels = math::floor_to_int(voxelPosition);
+					/*
+					if (hitProb)
+					{
+						println("Hit problem.");
+						println(format("Directionf: {},{},{}", directionf.x, directionf.y, directionf.z));
+						println(format("cubified: {},{},{}", cubified.x, cubified.y, cubified.z));
+						println(format("percentage: {},{},{}", percentage.x, percentage.y, percentage.z));
+						
+					}
+					*/
+					/*
+					if (_debug)
+					{
+						println(format("Voxel Position: {}, {}, {}", state.local_position_voxels.x,
+					state.local_position_voxels.y, state.local_position_voxels.z));
+					}
+					*/
 					state.requires_collisions = VoxelEngine::get_singleton().is_viewer_requiring_collisions(viewer_id);
-					state.requires_meshes =
-							VoxelEngine::get_singleton().is_viewer_requiring_visuals(viewer_id) && self._mesher.is_valid();
+					state.requires_meshes = VoxelEngine::get_singleton().is_viewer_requiring_visuals(viewer_id) &&
+							self._mesher.is_valid();
 
 					// Update data and mesh view boxes
 
@@ -1090,7 +1133,8 @@ void VoxelCubeSphereTerrain::process_viewers()
 					Vector3i data_block_pos;
 
 					if (state.requires_meshes || state.requires_collisions) {
-						const int view_distance_mesh_blocks = math::ceildiv(state.view_distance_voxels, mesh_block_size);
+						const int view_distance_mesh_blocks =
+								math::ceildiv(state.view_distance_voxels, mesh_block_size);
 						const int render_to_data_factor = (mesh_block_size / data_block_size);
 						const Vector3i mesh_block_pos = math::floordiv(state.local_position_voxels, mesh_block_size);
 
@@ -1098,9 +1142,9 @@ void VoxelCubeSphereTerrain::process_viewers()
 						view_distance_data_blocks = view_distance_mesh_blocks * render_to_data_factor + 1;
 
 						data_block_pos = mesh_block_pos * render_to_data_factor;
-						state.mesh_box =
-								Box3i::from_center_extents(mesh_block_pos, Vector3iUtil::create(view_distance_mesh_blocks))
-										.clipped(bounds_in_mesh_blocks);
+						state.mesh_box = Box3i::from_center_extents(
+								mesh_block_pos, Vector3iUtil::create(view_distance_mesh_blocks))
+												 .clipped(bounds_in_mesh_blocks);
 
 					} else {
 						view_distance_data_blocks = math::ceildiv(state.view_distance_voxels, data_block_size);
@@ -1112,14 +1156,14 @@ void VoxelCubeSphereTerrain::process_viewers()
 					state.data_box =
 							Box3i::from_center_extents(data_block_pos, Vector3iUtil::create(view_distance_data_blocks))
 									.clipped(bounds_in_data_blocks);
-				}
-				else
+				} 
+				else 
 				{
 					state.view_distance_voxels = 0;
-					state.local_position_voxels = math::floor_to_int(Vector3i(-1000000,-100000000,-10000000));
+					state.local_position_voxels = math::floor_to_int(Vector3i(-1000000, -100000000, -10000000));
 					state.requires_collisions = VoxelEngine::get_singleton().is_viewer_requiring_collisions(viewer_id);
-					state.requires_meshes =
-							VoxelEngine::get_singleton().is_viewer_requiring_visuals(viewer_id) && self._mesher.is_valid();
+					state.requires_meshes = VoxelEngine::get_singleton().is_viewer_requiring_visuals(viewer_id) &&
+							self._mesher.is_valid();
 
 					// Update data and mesh view boxes
 
@@ -1130,7 +1174,8 @@ void VoxelCubeSphereTerrain::process_viewers()
 					Vector3i data_block_pos;
 
 					if (state.requires_meshes || state.requires_collisions) {
-						const int view_distance_mesh_blocks = math::ceildiv(state.view_distance_voxels, mesh_block_size);
+						const int view_distance_mesh_blocks =
+								math::ceildiv(state.view_distance_voxels, mesh_block_size);
 						const int render_to_data_factor = (mesh_block_size / data_block_size);
 						const Vector3i mesh_block_pos = math::floordiv(state.local_position_voxels, mesh_block_size);
 
@@ -1138,9 +1183,9 @@ void VoxelCubeSphereTerrain::process_viewers()
 						view_distance_data_blocks = view_distance_mesh_blocks * render_to_data_factor + 1;
 
 						data_block_pos = mesh_block_pos * render_to_data_factor;
-						state.mesh_box =
-								Box3i::from_center_extents(mesh_block_pos, Vector3iUtil::create(view_distance_mesh_blocks))
-										.clipped(bounds_in_mesh_blocks);
+						state.mesh_box = Box3i::from_center_extents(
+								mesh_block_pos, Vector3iUtil::create(view_distance_mesh_blocks))
+												 .clipped(bounds_in_mesh_blocks);
 
 					} else {
 						view_distance_data_blocks = math::ceildiv(state.view_distance_voxels, data_block_size);
@@ -1153,12 +1198,22 @@ void VoxelCubeSphereTerrain::process_viewers()
 							Box3i::from_center_extents(data_block_pos, Vector3iUtil::create(view_distance_data_blocks))
 									.clipped(bounds_in_data_blocks);
 				}
+
+				/*
+				if (state.local_position_voxels != self.currentVoxPosition) 
+				{
+					self.currentVoxPosition = state.local_position_voxels;
+					String voxName = self.get_name();
+					println(voxName.get_data());
+					println(format("Voxel Position: {}, {}, {}", self.currentVoxPosition.x, self.currentVoxPosition.y, self.currentVoxPosition.z));
+				}
+				*/
 			}
 		};
 
 		// New viewers and updates
-		UpdatePairedViewer u{ *this, bounds_in_data_blocks, bounds_in_mesh_blocks, bounds_in_voxels, world_to_local_transform,
-			view_distance_scale };
+		UpdatePairedViewer u{ *this, bounds_in_data_blocks, bounds_in_mesh_blocks, bounds_in_voxels, world_transform,
+			world_to_local_transform, view_distance_scale, _debug };
 		VoxelEngine::get_singleton().for_each_viewer(u);
 	}
 
@@ -1377,7 +1432,7 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 void VoxelCubeSphereTerrain::apply_data_block_response(VoxelEngine::BlockDataOutput &ob) {
 	ZN_PROFILE_SCOPE();
 
-	//print_line(String("Receiving {0} blocks").format(varray(output.emerged_blocks.size())));
+	// print_line(String("Receiving {0} blocks").format(varray(output.emerged_blocks.size())));
 
 	if (ob.type == VoxelEngine::BlockDataOutput::TYPE_SAVED) {
 		if (ob.dropped) {
@@ -1522,8 +1577,6 @@ bool VoxelCubeSphereTerrain::has_data_block(Vector3i position) const {
 	return _data->has_block(position, 0);
 }
 
-
-
 void VoxelCubeSphereTerrain::process_meshing() {
 	ZN_PROFILE_SCOPE();
 	ProfilingClock profiling_clock;
@@ -1536,7 +1589,7 @@ void VoxelCubeSphereTerrain::process_meshing() {
 	std::shared_ptr<PriorityDependency::ViewersData> shared_viewers_data =
 			VoxelEngine::get_singleton().get_shared_viewers_data_from_default_world();
 
-	//const int used_channels_mask = get_used_channels_mask();
+	// const int used_channels_mask = get_used_channels_mask();
 	const int mesh_to_data_factor = get_mesh_block_size() / get_data_block_size();
 
 	for (size_t bi = 0; bi < _blocks_pending_update.size(); ++bi) {
@@ -1561,8 +1614,8 @@ void VoxelCubeSphereTerrain::process_meshing() {
 		}
 #endif
 
-		//print_line(String("DDD request {0}").format(varray(mesh_request.render_block_position.to_vec3())));
-		// We'll allocate this quite often. If it becomes a problem, it should be easy to pool.
+		// print_line(String("DDD request {0}").format(varray(mesh_request.render_block_position.to_vec3())));
+		//  We'll allocate this quite often. If it becomes a problem, it should be easy to pool.
 		MeshBlockTask *task = ZN_NEW(MeshBlockTask);
 		task->volume_id = _volume_id;
 		task->mesh_block_position = mesh_block_pos;
@@ -1605,18 +1658,18 @@ void VoxelCubeSphereTerrain::process_meshing() {
 
 	_stats.time_request_blocks_to_update = profiling_clock.restart();
 
-	//print_line(String("d:") + String::num(_dirty_blocks.size()) + String(", q:") +
-	//String::num(_block_update_queue.size()));
+	// print_line(String("d:") + String::num(_dirty_blocks.size()) + String(", q:") +
+	// String::num(_block_update_queue.size()));
 }
 
 void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutput &ob) {
 	ZN_PROFILE_SCOPE();
-	//print_line(String("DDD receive {0}").format(varray(ob.position.to_vec3())));
+	// print_line(String("DDD receive {0}").format(varray(ob.position.to_vec3())));
 
 	VoxelMeshBlockVT *block = _mesh_map.get_block(ob.position);
 	if (block == nullptr) {
-		//print_line("- no longer loaded");
-		// That block is no longer loaded, drop the result
+		// print_line("- no longer loaded");
+		//  That block is no longer loaded, drop the result
 		++_stats.dropped_block_meshs;
 		return;
 	}
@@ -1804,7 +1857,8 @@ bool VoxelCubeSphereTerrain::_b_try_set_block_data(Vector3i position, Ref<gd::Vo
 	return try_set_block_data(position, buffer);
 }
 
-PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(Vector3i area_origin, Vector3i area_size) const {
+PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
+		Vector3i area_origin, Vector3i area_size) const {
 	static thread_local std::vector<int> s_ids;
 	std::vector<int> &viewer_ids = s_ids;
 	viewer_ids.clear();
@@ -1824,17 +1878,29 @@ PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
 	return peer_ids;
 }
 
+void VoxelCubeSphereTerrain::set_debug(bool debugEnabled) {
+	_debug = debugEnabled;
+}
+
+bool VoxelCubeSphereTerrain::get_debug() const {
+	return _debug;
+}
+
 void VoxelCubeSphereTerrain::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_debug", "debug"), &VoxelCubeSphereTerrain::set_debug);
+	ClassDB::bind_method(D_METHOD("get_debug"), &VoxelCubeSphereTerrain::get_debug);
+
 	ClassDB::bind_method(D_METHOD("set_material_override", "material"), &VoxelCubeSphereTerrain::set_material_override);
 	ClassDB::bind_method(D_METHOD("get_material_override"), &VoxelCubeSphereTerrain::get_material_override);
 
-	ClassDB::bind_method(D_METHOD("set_max_view_distance", "distance_in_voxels"), &VoxelCubeSphereTerrain::set_max_view_distance);
+	ClassDB::bind_method(
+			D_METHOD("set_max_view_distance", "distance_in_voxels"), &VoxelCubeSphereTerrain::set_max_view_distance);
 	ClassDB::bind_method(D_METHOD("get_max_view_distance"), &VoxelCubeSphereTerrain::get_max_view_distance);
 
 	ClassDB::bind_method(D_METHOD("set_block_enter_notification_enabled", "enabled"),
 			&VoxelCubeSphereTerrain::set_block_enter_notification_enabled);
-	ClassDB::bind_method(
-			D_METHOD("is_block_enter_notification_enabled"), &VoxelCubeSphereTerrain::is_block_enter_notification_enabled);
+	ClassDB::bind_method(D_METHOD("is_block_enter_notification_enabled"),
+			&VoxelCubeSphereTerrain::is_block_enter_notification_enabled);
 
 	ClassDB::bind_method(D_METHOD("set_area_edit_notification_enabled", "enabled"),
 			&VoxelCubeSphereTerrain::set_area_edit_notification_enabled);
@@ -1842,7 +1908,8 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 			D_METHOD("is_area_edit_notification_enabled"), &VoxelCubeSphereTerrain::is_area_edit_notification_enabled);
 
 	ClassDB::bind_method(D_METHOD("get_generate_collisions"), &VoxelCubeSphereTerrain::get_generate_collisions);
-	ClassDB::bind_method(D_METHOD("set_generate_collisions", "enabled"), &VoxelCubeSphereTerrain::set_generate_collisions);
+	ClassDB::bind_method(
+			D_METHOD("set_generate_collisions", "enabled"), &VoxelCubeSphereTerrain::set_generate_collisions);
 
 	ClassDB::bind_method(D_METHOD("get_collision_layer"), &VoxelCubeSphereTerrain::get_collision_layer);
 	ClassDB::bind_method(D_METHOD("set_collision_layer", "layer"), &VoxelCubeSphereTerrain::set_collision_layer);
@@ -1867,18 +1934,21 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("save_modified_blocks"), &VoxelCubeSphereTerrain::_b_save_modified_blocks);
 	ClassDB::bind_method(D_METHOD("save_block", "position"), &VoxelCubeSphereTerrain::_b_save_block);
 
-	ClassDB::bind_method(D_METHOD("set_run_stream_in_editor", "enable"), &VoxelCubeSphereTerrain::set_run_stream_in_editor);
+	ClassDB::bind_method(
+			D_METHOD("set_run_stream_in_editor", "enable"), &VoxelCubeSphereTerrain::set_run_stream_in_editor);
 	ClassDB::bind_method(D_METHOD("is_stream_running_in_editor"), &VoxelCubeSphereTerrain::is_stream_running_in_editor);
 
+	ClassDB::bind_method(D_METHOD("set_automatic_loading_enabled", "enable"),
+			&VoxelCubeSphereTerrain::set_automatic_loading_enabled);
 	ClassDB::bind_method(
-			D_METHOD("set_automatic_loading_enabled", "enable"), &VoxelCubeSphereTerrain::set_automatic_loading_enabled);
-	ClassDB::bind_method(D_METHOD("is_automatic_loading_enabled"), &VoxelCubeSphereTerrain::is_automatic_loading_enabled);
+			D_METHOD("is_automatic_loading_enabled"), &VoxelCubeSphereTerrain::is_automatic_loading_enabled);
 
 	// TODO Rename `_voxel_bounds`
 	ClassDB::bind_method(D_METHOD("set_bounds"), &VoxelCubeSphereTerrain::_b_set_bounds);
 	ClassDB::bind_method(D_METHOD("get_bounds"), &VoxelCubeSphereTerrain::_b_get_bounds);
 
-	ClassDB::bind_method(D_METHOD("try_set_block_data", "position", "voxels"), &VoxelCubeSphereTerrain::_b_try_set_block_data);
+	ClassDB::bind_method(
+			D_METHOD("try_set_block_data", "position", "voxels"), &VoxelCubeSphereTerrain::_b_try_set_block_data);
 
 	ClassDB::bind_method(D_METHOD("get_viewer_network_peer_ids_in_area", "area_origin", "area_size"),
 			&VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area);

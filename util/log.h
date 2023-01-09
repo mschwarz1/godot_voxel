@@ -19,7 +19,9 @@ bool is_verbose_output_enabled();
 
 // TODO Can't use `print_line` because Godot defines it as a macro
 void println(const char *cstr);
+void println(const char32_t *cstr);
 void println(const FwdConstStdString &s);
+
 
 void print_warning(const char *warning, const char *func, const char *file, int line);
 void print_warning(const FwdConstStdString &warning, const char *func, const char *file, int line);

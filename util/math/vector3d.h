@@ -59,9 +59,9 @@ inline Vector3d cubify(const Vector3d& position)
     z = position.z;
 	Vector3d finalPosition = Vector3d();
     double fx, fy, fz;
-    fx = fabsf(x);
-    fy = fabsf(y);
-    fz = fabsf(z);
+    fx = fabs(x);
+    fy = fabs(y);
+    fz = fabs(z);
 
     const double inverseSqrt2 = 0.70710676908493042;
 

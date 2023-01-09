@@ -179,8 +179,11 @@ bool VoxelEngine::is_volume_valid(uint32_t volume_id) const {
 	return _world.volumes.is_valid(volume_id);
 }
 
-uint32_t VoxelEngine::add_viewer() {
-	return _world.viewers.create(Viewer());
+uint32_t VoxelEngine::add_viewer(VoxelViewer* ref) {
+
+	Viewer viewer = Viewer();
+	viewer.viewerRef = ref;
+	return _world.viewers.create(viewer);
 }
 
 void VoxelEngine::remove_viewer(uint32_t viewer_id) {
