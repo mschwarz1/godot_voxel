@@ -969,6 +969,50 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 #endif
 }
 
+Vector3i VoxelCubeSphereTerrain::convert_position_to_vox_position(Vector3 local_position) {
+	// convert local_position to unit cube position
+	double distance = local_position.length();
+	Vector3 direction = local_position.normalized();
+
+	// convert unit cube position to voxel position
+	Vector3d directionf = math::normalized(Vector3d(direction.x, direction.y, direction.z));
+
+	Vector3d absDirection = Vector3d(abs(directionf.x), abs(directionf.y), abs(directionf.z));
+	Vector3d cubified = math::cubify(directionf);
+	bool hitProb = false;
+	if (isnan(cubified.x)) {
+		cubified.x = 0.0;
+		hitProb = true;
+	}
+
+	if (isnan(cubified.z)) {
+		cubified.z = 0.0;
+		hitProb = true;
+	}
+	const Box3i bounds_in_voxels = _data->get_bounds();
+
+	double curveRes = bounds_in_voxels.size.x;
+	double radius = curveRes / 2.0;
+	Vector3d percentage = Vector3d((cubified.x / 2.0) + .5f, cubified.y, (cubified.z / 2.0) + .5f);
+
+	/*
+	if (percentage.x >= 1.0 || percentage.x < 0.0) {
+		percentage.x = -1000.0;
+	}
+
+	if (percentage.z >= 1.0 || percentage.z < 0.0) {
+		percentage.z = -1000.0;
+	}
+	*/
+
+	Vector3d voxelPosition = Vector3d(percentage.x * curveRes, (distance - radius) + .6, percentage.z * curveRes);
+
+	if (voxelPosition.y < 0) {
+		voxelPosition.y = -10000000;
+	}
+	return math::floor_to_int(voxelPosition);
+}
+
 void VoxelCubeSphereTerrain::process() {
 	ZN_PROFILE_SCOPE();
 
@@ -1068,14 +1112,12 @@ void VoxelCubeSphereTerrain::process_viewers() {
 				if ((absDirection.y > absDirection.x && absDirection.y > absDirection.z) && directionf.y > 0.0) {
 					Vector3d cubified = math::cubify(directionf);
 					bool hitProb = false;
-					if (isnan(cubified.x))
-					{
+					if (isnan(cubified.x)) {
 						cubified.x = 0.0;
 						hitProb = true;
 					}
 
-					if (isnan(cubified.z))
-					{
+					if (isnan(cubified.z)) {
 						cubified.z = 0.0;
 						hitProb = true;
 					}
@@ -1110,7 +1152,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 						println(format("Directionf: {},{},{}", directionf.x, directionf.y, directionf.z));
 						println(format("cubified: {},{},{}", cubified.x, cubified.y, cubified.z));
 						println(format("percentage: {},{},{}", percentage.x, percentage.y, percentage.z));
-						
+
 					}
 					*/
 					/*
@@ -1156,9 +1198,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 					state.data_box =
 							Box3i::from_center_extents(data_block_pos, Vector3iUtil::create(view_distance_data_blocks))
 									.clipped(bounds_in_data_blocks);
-				} 
-				else 
-				{
+				} else {
 					state.view_distance_voxels = 0;
 					state.local_position_voxels = math::floor_to_int(Vector3i(-1000000, -100000000, -10000000));
 					state.requires_collisions = VoxelEngine::get_singleton().is_viewer_requiring_collisions(viewer_id);
@@ -1200,12 +1240,13 @@ void VoxelCubeSphereTerrain::process_viewers() {
 				}
 
 				/*
-				if (state.local_position_voxels != self.currentVoxPosition) 
+				if (state.local_position_voxels != self.currentVoxPosition)
 				{
 					self.currentVoxPosition = state.local_position_voxels;
 					String voxName = self.get_name();
 					println(voxName.get_data());
-					println(format("Voxel Position: {}, {}, {}", self.currentVoxPosition.x, self.currentVoxPosition.y, self.currentVoxPosition.z));
+					println(format("Voxel Position: {}, {}, {}", self.currentVoxPosition.x, self.currentVoxPosition.y,
+				self.currentVoxPosition.z));
 				}
 				*/
 			}
@@ -1866,8 +1907,8 @@ PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
 
 	PackedInt32Array peer_ids;
 	peer_ids.resize(viewer_ids.size());
-	// Using direct access because when compiling with GodotCpp the array access syntax is different, also it is a bit
-	// faster
+	// Using direct access because when compiling with GodotCpp the array access syntax is different, also it is a
+	// bit faster
 	int32_t *peer_ids_data = peer_ids.ptrw();
 	ZN_ASSERT_RETURN_V(peer_ids_data != nullptr, peer_ids);
 	for (size_t i = 0; i < viewer_ids.size(); ++i) {
@@ -1927,6 +1968,8 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_mesh_block_size"), &VoxelCubeSphereTerrain::get_mesh_block_size);
 	ClassDB::bind_method(D_METHOD("set_mesh_block_size", "size"), &VoxelCubeSphereTerrain::set_mesh_block_size);
+
+	ClassDB::bind_method(D_METHOD("convert_position_to_vox_position", "local_position"), &VoxelCubeSphereTerrain::convert_position_to_vox_position);
 
 	ClassDB::bind_method(D_METHOD("get_statistics"), &VoxelCubeSphereTerrain::_b_get_statistics);
 	ClassDB::bind_method(D_METHOD("get_voxel_tool"), &VoxelCubeSphereTerrain::get_voxel_tool);

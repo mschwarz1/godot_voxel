@@ -34,6 +34,8 @@ public:
 
 	Vector3i currentVoxPosition;
 
+	Vector3i convert_position_to_vox_position(Vector3 local_position);
+
 
 	void set_stream(Ref<VoxelStream> p_stream) override;
 	Ref<VoxelStream> get_stream() const override;
