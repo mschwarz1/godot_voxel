@@ -1,5 +1,8 @@
 #include "gpu_storage_buffer_pool.h"
 #include "../util/dstack.h"
+#include "../util/godot/core/array.h" // for `varray` in GDExtension builds
+#include "../util/godot/core/print_string.h"
+#include "../util/godot/core/string.h" // for `+=` operator missing from String in GDExtension builds
 #include "../util/math/funcs.h"
 #include "../util/profiling.h"
 #include "../util/string_funcs.h"
@@ -152,7 +155,8 @@ void GPUStorageBufferPool::debug_print() const {
 		}
 		const unsigned int block_size = _pool_sizes[i];
 		s += String("Pool[{0}] block size: {1}, pooled buffers: {2}, capacity: {3}\n")
-					 .format(varray(i, block_size, pool.buffers.size(), pool.buffers.capacity()));
+					 .format(varray(i, block_size, ZN_SIZE_T_TO_VARIANT(pool.buffers.size()),
+							 ZN_SIZE_T_TO_VARIANT(pool.buffers.capacity())));
 	}
 	s += "----";
 	print_line(s);

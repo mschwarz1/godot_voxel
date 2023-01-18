@@ -3,29 +3,31 @@
 #include "../../generators/graph/node_type_db.h"
 #include "../../generators/graph/voxel_generator_graph.h"
 #include "../../terrain/voxel_node.h"
-#include "../../util/godot/array.h"
-#include "../../util/godot/button.h"
-#include "../../util/godot/callable.h"
-#include "../../util/godot/canvas_item.h"
-#include "../../util/godot/check_box.h"
-#include "../../util/godot/control.h"
-#include "../../util/godot/editor_file_dialog.h"
-#include "../../util/godot/editor_quick_open.h"
+#include "../../util/godot/classes/button.h"
+#include "../../util/godot/classes/canvas_item.h"
+#include "../../util/godot/classes/check_box.h"
+#include "../../util/godot/classes/control.h"
+#include "../../util/godot/classes/editor_file_dialog.h"
+#include "../../util/godot/classes/editor_quick_open.h"
+#include "../../util/godot/classes/graph_edit.h"
+#include "../../util/godot/classes/h_box_container.h"
+#include "../../util/godot/classes/input_event_mouse_button.h"
+#include "../../util/godot/classes/input_event_mouse_motion.h"
+#include "../../util/godot/classes/label.h"
+#include "../../util/godot/classes/menu_button.h"
+#include "../../util/godot/classes/node.h"
+#include "../../util/godot/classes/option_button.h"
+#include "../../util/godot/classes/popup_menu.h"
+#include "../../util/godot/classes/resource_loader.h"
+#include "../../util/godot/classes/scene_tree.h"
+#include "../../util/godot/classes/time.h"
+#include "../../util/godot/classes/world_3d.h"
+#include "../../util/godot/core/array.h"
+#include "../../util/godot/core/callable.h"
+#include "../../util/godot/core/input_enums.h"
+#include "../../util/godot/core/mouse_button.h"
 #include "../../util/godot/editor_scale.h"
 #include "../../util/godot/funcs.h"
-#include "../../util/godot/graph_edit.h"
-#include "../../util/godot/h_box_container.h"
-#include "../../util/godot/input_enums.h"
-#include "../../util/godot/input_event_mouse_button.h"
-#include "../../util/godot/label.h"
-#include "../../util/godot/menu_button.h"
-#include "../../util/godot/node.h"
-#include "../../util/godot/option_button.h"
-#include "../../util/godot/popup_menu.h"
-#include "../../util/godot/resource_loader.h"
-#include "../../util/godot/scene_tree.h"
-#include "../../util/godot/time.h"
-#include "../../util/godot/world_3d.h"
 #include "../../util/log.h"
 #include "../../util/macros.h"
 #include "../../util/math/conv.h"
@@ -115,7 +117,7 @@ VoxelGraphEditor::VoxelGraphEditor() {
 				sub_menu->add_item("Reset location", MENU_PREVIEW_RESET_LOCATION);
 				sub_menu->connect("id_pressed", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_menu_id_pressed));
 				popup_menu->add_child(sub_menu);
-				popup_menu->add_submenu_item(TTR("Preview Axes"), sub_menu->get_name(), MENU_PREVIEW_AXES);
+				popup_menu->add_submenu_item(ZN_TTR("Preview Axes"), sub_menu->get_name(), MENU_PREVIEW_AXES);
 				_preview_axes_menu = sub_menu;
 				update_preview_axes_menu();
 			}
@@ -205,7 +207,7 @@ VoxelGraphEditor::VoxelGraphEditor() {
 		PopupMenu *menu = category_menus[node_type.category];
 		ZN_ASSERT(menu != nullptr);
 		if (i == VoxelGraphFunction::NODE_FUNCTION) {
-			menu->add_item(TTR("Browse..."), CONTEXT_MENU_FUNCTION_BROWSE);
+			menu->add_item(ZN_TTR("Browse..."), CONTEXT_MENU_FUNCTION_BROWSE);
 #ifdef ZN_GODOT
 			menu->add_item(TTR("Quick Open..."), CONTEXT_MENU_FUNCTION_QUICK_OPEN);
 #endif
@@ -232,12 +234,13 @@ VoxelGraphEditor::VoxelGraphEditor() {
 	_function_file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_FILE);
 	// TODO Usability: there is no way to limit a file dialog to a specific TYPE of resource, only file extensions. So
 	// it's not useful because text resources are almost all using `.tres`...
-	_function_file_dialog->add_filter("*.tres", TTR("Text Resource"));
-	_function_file_dialog->add_filter("*.res", TTR("Binary Resource"));
+	_function_file_dialog->add_filter("*.tres", ZN_TTR("Text Resource"));
+	_function_file_dialog->add_filter("*.res", ZN_TTR("Binary Resource"));
 	_function_file_dialog->connect(
 			"file_selected", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_function_file_dialog_file_selected));
 	add_child(_function_file_dialog);
 
+	// TODO GDX: EditorQuickOpen is not exposed to extensions
 #ifdef ZN_GODOT
 	_function_quick_open_dialog = memnew(EditorQuickOpen);
 	_function_quick_open_dialog->connect(
@@ -315,11 +318,11 @@ Ref<VoxelGraphFunction> VoxelGraphEditor::get_graph() const {
 	return _graph;
 }
 
-void VoxelGraphEditor::set_undo_redo(Ref<EditorUndoRedoManager> undo_redo) {
+void VoxelGraphEditor::set_undo_redo(EditorUndoRedoManager *undo_redo) {
 	_undo_redo = undo_redo;
 }
 
-Ref<EditorUndoRedoManager> VoxelGraphEditor::get_undo_redo() const {
+EditorUndoRedoManager *VoxelGraphEditor::get_undo_redo() const {
 	return _undo_redo;
 }
 
@@ -329,8 +332,7 @@ void VoxelGraphEditor::set_voxel_node(VoxelNode *node) {
 		ZN_PRINT_VERBOSE("Reference node for VoxelGraph gizmos: null");
 		_debug_renderer.set_world(nullptr);
 	} else {
-		ZN_PRINT_VERBOSE(
-				format("Reference node for VoxelGraph gizmos: {}", GodotStringWrapper(String(node->get_path()))));
+		ZN_PRINT_VERBOSE(format("Reference node for VoxelGraph gizmos: {}", String(node->get_path())));
 		_debug_renderer.set_world(_voxel_node->get_world_3d().ptr());
 	}
 }
@@ -818,7 +820,7 @@ void VoxelGraphEditor::_on_node_resize_request(Vector2 new_size, int node_id) {
 	ZN_ASSERT_RETURN(_graph.is_valid());
 
 	// TODO Not sure if EDSCALE has to be unapplied in this case?
-	_undo_redo->create_action(TTR("Resize Node"), UndoRedo::MERGE_ENDS);
+	_undo_redo->create_action(ZN_TTR("Resize Node"), UndoRedo::MERGE_ENDS);
 	_undo_redo->add_do_method(this, "set_node_size", node_id, new_size);
 	_undo_redo->add_do_method(_graph.ptr(), "set_node_gui_size", node_id, new_size);
 	_undo_redo->add_undo_method(this, "set_node_size", node_id, node_view->get_size());
@@ -841,8 +843,7 @@ void VoxelGraphEditor::_on_graph_node_preview_gui_input(Ref<InputEvent> event) {
 	Ref<InputEventMouseMotion> mm = event;
 	if (mm.is_valid()) {
 		// Ctrl+Drag above any preview to pan around the area they render.
-		if (mm->is_command_or_control_pressed() &&
-				(mm->get_button_mask() & MouseButton::MASK_MIDDLE) != MouseButton::NONE) {
+		if (mm->is_command_or_control_pressed() && mm->get_button_mask().has_flag(ZN_GODOT_MouseButtonMask_MIDDLE)) {
 			const Vector2 rel = mm->get_relative();
 			set_preview_transform(_preview_offset - Vector2f(rel.x, -rel.y) * _preview_scale, _preview_scale);
 
@@ -856,12 +857,12 @@ void VoxelGraphEditor::_on_graph_node_preview_gui_input(Ref<InputEvent> event) {
 		// Ctrl+Wheel above any preview to zoom in and out the area they render.
 		if (mb->is_command_or_control_pressed()) {
 			const float base_factor = 1.1f;
-			if (mb->get_button_index() == MouseButton::WHEEL_UP) {
+			if (mb->get_button_index() == ZN_GODOT_MouseButton_WHEEL_UP) {
 				set_preview_transform(_preview_offset, _preview_scale / base_factor);
 				// Prevent panning of GraphEdit
 				get_viewport()->set_input_as_handled();
 			}
-			if (mb->get_button_index() == MouseButton::WHEEL_DOWN) {
+			if (mb->get_button_index() == ZN_GODOT_MouseButton_WHEEL_DOWN) {
 				set_preview_transform(_preview_offset, _preview_scale * base_factor);
 				// Prevent panning of GraphEdit
 				get_viewport()->set_input_as_handled();
@@ -1440,28 +1441,20 @@ void VoxelGraphEditor::_bind_methods() {
 			D_METHOD("_on_graph_node_dragged", "from", "to", "id"), &VoxelGraphEditor::_on_graph_node_dragged);
 	ClassDB::bind_method(D_METHOD("_on_menu_id_pressed", "id"), &VoxelGraphEditor::_on_menu_id_pressed);
 	ClassDB::bind_method(D_METHOD("_on_context_menu_id_pressed", "id"), &VoxelGraphEditor::_on_context_menu_id_pressed);
-	ClassDB::bind_method(
-			D_METHOD("_on_update_previews_button_pressed"), &VoxelGraphEditor::_on_update_previews_button_pressed);
-	ClassDB::bind_method(D_METHOD("_on_profile_button_pressed"), &VoxelGraphEditor::_on_profile_button_pressed);
 	ClassDB::bind_method(D_METHOD("_on_graph_changed"), &VoxelGraphEditor::_on_graph_changed);
 	ClassDB::bind_method(
 			D_METHOD("_on_graph_node_name_changed", "node_id"), &VoxelGraphEditor::_on_graph_node_name_changed);
 	ClassDB::bind_method(
-			D_METHOD("_on_analyze_range_button_pressed"), &VoxelGraphEditor::_on_analyze_range_button_pressed);
-	ClassDB::bind_method(
 			D_METHOD("_on_range_analysis_toggled", "enabled"), &VoxelGraphEditor::_on_range_analysis_toggled);
 	ClassDB::bind_method(
 			D_METHOD("_on_range_analysis_area_changed"), &VoxelGraphEditor::_on_range_analysis_area_changed);
-	ClassDB::bind_method(
-			D_METHOD("_on_preview_axes_menu_id_pressed", "id"), &VoxelGraphEditor::_on_preview_axes_menu_id_pressed);
-	ClassDB::bind_method(
-			D_METHOD("_on_generate_shader_button_pressed"), &VoxelGraphEditor::_on_generate_shader_button_pressed);
-	ClassDB::bind_method(D_METHOD("_on_live_update_toggled", "enabled"), &VoxelGraphEditor::_on_live_update_toggled);
 	ClassDB::bind_method(D_METHOD("_on_popout_button_pressed"), &VoxelGraphEditor::_on_popout_button_pressed);
 	ClassDB::bind_method(D_METHOD("_on_function_file_dialog_file_selected", "fpath"),
 			&VoxelGraphEditor::_on_function_file_dialog_file_selected);
+#if ZN_GODOT
 	ClassDB::bind_method(D_METHOD("_on_function_quick_open_dialog_quick_open"),
 			&VoxelGraphEditor::_on_function_quick_open_dialog_quick_open);
+#endif
 	ClassDB::bind_method(
 			D_METHOD("_on_node_resize_request", "new_size", "node_id"), &VoxelGraphEditor::_on_node_resize_request);
 	ClassDB::bind_method(

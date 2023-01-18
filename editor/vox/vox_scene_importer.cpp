@@ -3,13 +3,13 @@
 #include "../../meshers/cubes/voxel_mesher_cubes.h"
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../streams/vox/vox_data.h"
-#include "../../util/godot/array.h"
+#include "../../util/godot/classes/image_texture.h"
+#include "../../util/godot/classes/mesh_instance_3d.h"
+#include "../../util/godot/classes/packed_scene.h"
+#include "../../util/godot/classes/resource_saver.h"
+#include "../../util/godot/classes/standard_material_3d.h"
+#include "../../util/godot/core/array.h"
 #include "../../util/godot/funcs.h"
-#include "../../util/godot/image_texture.h"
-#include "../../util/godot/mesh_instance_3d.h"
-#include "../../util/godot/packed_scene.h"
-#include "../../util/godot/resource_saver.h"
-#include "../../util/godot/standard_material_3d.h"
 #include "../../util/profiling.h"
 #include "vox_import_funcs.h"
 
@@ -327,7 +327,7 @@ Error VoxelVoxSceneImporter::_zn_import(const String &p_source_file, const Strin
 				Ref<StandardMaterial3D> material = materials[material_index]->duplicate();
 				if (atlas.is_valid()) {
 					// TODO Do I absolutely HAVE to load this texture back to memory AND renderer just so import works??
-					//Ref<Texture> texture = ResourceLoader::load(atlas_path);
+					// Ref<Texture> texture = ResourceLoader::load(atlas_path);
 					// TODO THIS IS A WORKAROUND, it is not supposed to be an ImageTexture...
 					// See earlier code, I could not find any way to reference a separate StreamTexture.
 					Ref<ImageTexture> texture = ImageTexture::create_from_image(atlas);
@@ -387,7 +387,7 @@ Error VoxelVoxSceneImporter::_zn_import(const String &p_source_file, const Strin
 		Ref<PackedScene> scene;
 		scene.instantiate();
 		scene->pack(root_node);
-		String scene_save_path = p_save_path + ".tscn";
+		String scene_save_path = p_save_path + String(".tscn");
 		const Error save_err = save_resource(scene, scene_save_path, ResourceSaver::FLAG_NONE);
 		memdelete(root_node);
 		ERR_FAIL_COND_V_MSG(save_err != OK, save_err, "Cannot save scene to file '" + scene_save_path);

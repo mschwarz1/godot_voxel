@@ -1,7 +1,10 @@
 #include "compute_shader_resource.h"
 #include "../util/dstack.h"
-#include "../util/godot/curve.h"
-#include "../util/godot/image.h"
+#include "../util/godot/classes/curve.h"
+#include "../util/godot/classes/image.h"
+#include "../util/godot/classes/rd_texture_format.h"
+#include "../util/godot/classes/rd_texture_view.h"
+#include "../util/godot/core/array.h" // for `varray` in GDExtension builds
 #include "../util/profiling.h"
 #include "voxel_engine.h"
 
@@ -118,7 +121,8 @@ void ComputeShaderResource::create_texture_2d(const Image &image) {
 	data_array.append(image.get_data());
 
 	_rid = texture_create(rd, **texture_format, **texture_view, data_array);
-	ERR_FAIL_COND_MSG(_rid.is_null(), "Failed to create texture");
+	// RID::is_null() is not available in GDExtension
+	ERR_FAIL_COND_MSG(!_rid.is_valid(), "Failed to create texture");
 }
 
 void ComputeShaderResource::create_texture_2d(const Curve &curve) {
@@ -196,7 +200,7 @@ void ComputeShaderResource::create_texture_3d_zxy(Span<const float> fdata_zxy, V
 	}
 
 	_rid = texture_create(rd, **texture_format, **texture_view, data_array);
-	ERR_FAIL_COND_MSG(_rid.is_null(), "Failed to create texture");
+	ERR_FAIL_COND_MSG(!_rid.is_valid(), "Failed to create texture");
 
 	_type = TYPE_TEXTURE_3D;
 }
@@ -205,15 +209,15 @@ void ComputeShaderResource::create_storage_buffer(const PackedByteArray &data) {
 	clear();
 	RenderingDevice &rd = VoxelEngine::get_singleton().get_rendering_device();
 	_rid = rd.storage_buffer_create(data.size(), data);
-	ERR_FAIL_COND(_rid.is_null());
+	ERR_FAIL_COND(!_rid.is_valid());
 	_type = TYPE_STORAGE_BUFFER;
 }
 
 void ComputeShaderResource::update_storage_buffer(const PackedByteArray &data) {
-	ERR_FAIL_COND(_rid.is_null());
+	ERR_FAIL_COND(!_rid.is_valid());
 	ERR_FAIL_COND(_type != TYPE_STORAGE_BUFFER);
 	RenderingDevice &rd = VoxelEngine::get_singleton().get_rendering_device();
-	const Error err = rd.buffer_update(_rid, 0, data.size(), data.ptr());
+	const Error err = zylann::update_storage_buffer(rd, _rid, 0, data.size(), data);
 	ERR_FAIL_COND_MSG(err != OK, String("Failed to update storage buffer (error {0})").format(varray(err)));
 }
 

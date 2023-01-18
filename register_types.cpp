@@ -26,7 +26,9 @@
 #include "meshers/cubes/voxel_mesher_cubes.h"
 #include "meshers/dmc/voxel_mesher_dmc.h"
 #include "meshers/transvoxel/voxel_mesher_transvoxel.h"
-#include "storage/modifiers_gd.h"
+#include "modifiers/godot/voxel_modifier_gd.h"
+#include "modifiers/godot/voxel_modifier_mesh_gd.h"
+#include "modifiers/godot/voxel_modifier_sphere_gd.h"
 #include "storage/voxel_buffer_gd.h"
 #include "storage/voxel_memory_pool.h"
 #include "storage/voxel_metadata_variant.h"
@@ -60,9 +62,9 @@
 #include "util/noise/fast_noise_2.h"
 #endif
 
-#include "util/godot/class_db.h"
-#include "util/godot/engine.h"
-#include "util/godot/project_settings.h"
+#include "util/godot/classes/engine.h"
+#include "util/godot/classes/project_settings.h"
+#include "util/godot/core/class_db.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef TOOLS_ENABLED
@@ -92,10 +94,12 @@
 #include "editor/graph/editor_property_text_change_on_submit.h"
 #include "editor/graph/voxel_graph_editor.h"
 #include "editor/graph/voxel_graph_editor_inspector_plugin.h"
+#include "editor/graph/voxel_graph_editor_io_dialog.h"
 #include "editor/graph/voxel_graph_editor_node.h"
 #include "editor/graph/voxel_graph_editor_node_preview.h"
 #include "editor/graph/voxel_graph_editor_shader_dialog.h"
 #include "editor/graph/voxel_graph_editor_window.h"
+#include "editor/graph/voxel_graph_function_inspector_plugin.h"
 #include "editor/graph/voxel_graph_node_inspector_wrapper.h"
 #include "editor/graph/voxel_range_analysis_dialog.h"
 #include "editor/instance_library/voxel_instance_library_inspector_plugin.h"
@@ -390,8 +394,8 @@ void uninitialize_voxel_module(ModuleInitializationLevel p_level) {
 #ifdef ZN_GODOT_EXTENSION
 extern "C" {
 // Library entry point
-GDNativeBool GDN_EXPORT voxel_library_init(const GDNativeInterface *p_interface,
-		const GDNativeExtensionClassLibraryPtr p_library, GDNativeInitialization *r_initialization) {
+GDExtensionBool GDE_EXPORT voxel_library_init(const GDExtensionInterface *p_interface,
+		const GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
 	godot::GDExtensionBinding::InitObject init_obj(p_interface, p_library, r_initialization);
 
 	init_obj.register_initializer(initialize_voxel_module);

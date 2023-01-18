@@ -5,20 +5,24 @@
 #include "../streams/instance_data.h"
 #include "../util/file_locker.h"
 #include "../util/memory.h"
-#include "../util/struct_db.h"
+#include "../util/slot_map.h"
 #include "../util/math/vector3d.h"
 #include "../util/tasks/progressive_task_runner.h"
 #include "../util/tasks/threaded_task_runner.h"
 #include "../util/tasks/time_spread_task_runner.h"
 #include "compute_shader.h"
-#include "distance_normalmaps.h"
+#include "detail_rendering.h"
 #include "gpu_storage_buffer_pool.h"
 #include "gpu_task_runner.h"
+#include "ids.h"
 #include "priority_dependency.h"
 
-#include "../util/godot/rendering_device.h"
+#include "../util/godot/classes/rendering_device.h"
 
 ZN_GODOT_FORWARD_DECLARE(class RenderingDevice);
+#ifdef ZN_GODOT_EXTENSION
+using namespace godot;
+#endif
 
 namespace zylann::voxel {
 
@@ -54,7 +58,7 @@ public:
 		bool has_mesh_resource;
 		// Can be null. Attached to meshing output so it is tracked more easily, because it is baked asynchronously
 		// starting from the mesh task, and it might complete earlier or later than the mesh.
-		std::shared_ptr<VirtualTextureOutput> virtual_textures;
+		std::shared_ptr<DetailTextureOutput> detail_textures;
 	};
 
 	struct BlockDataOutput {
@@ -79,8 +83,8 @@ public:
 		bool initial_load;
 	};
 
-	struct BlockVirtualTextureOutput {
-		std::shared_ptr<VirtualTextureOutput> virtual_textures;
+	struct BlockDetailTextureOutput {
+		std::shared_ptr<DetailTextureOutput> detail_textures;
 		Vector3i position;
 		uint32_t lod_index;
 	};
@@ -88,7 +92,7 @@ public:
 	struct VolumeCallbacks {
 		void (*mesh_output_callback)(void *, BlockMeshOutput &) = nullptr;
 		void (*data_output_callback)(void *, BlockDataOutput &) = nullptr;
-		void (*virtual_texture_output_callback)(void *, BlockVirtualTextureOutput &) = nullptr;
+		void (*virtual_texture_output_callback)(void *, BlockDetailTextureOutput &) = nullptr;
 		void *data = nullptr;
 
 		inline bool check_callbacks() const {
@@ -128,34 +132,34 @@ public:
 	static void create_singleton(ThreadsConfig threads_config);
 	static void destroy_singleton();
 
-	uint32_t add_volume(VolumeCallbacks callbacks);
-	VolumeCallbacks get_volume_callbacks(uint32_t volume_id) const;
+	VolumeID add_volume(VolumeCallbacks callbacks);
+	VolumeCallbacks get_volume_callbacks(VolumeID volume_id) const;
 
-	void remove_volume(uint32_t volume_id);
-	bool is_volume_valid(uint32_t volume_id) const;
+	void remove_volume(VolumeID volume_id);
+	bool is_volume_valid(VolumeID volume_id) const;
 
 	std::shared_ptr<PriorityDependency::ViewersData> get_shared_viewers_data_from_default_world() const {
 		return _world.shared_priority_dependency;
 	}
 
-	uint32_t add_viewer(VoxelViewer* ref);
-	void remove_viewer(uint32_t viewer_id);
-	void set_viewer_position(uint32_t viewer_id, Vector3 position);
-	void set_viewer_distance(uint32_t viewer_id, unsigned int distance);
-	unsigned int get_viewer_distance(uint32_t viewer_id) const;
-	void set_viewer_requires_visuals(uint32_t viewer_id, bool enabled);
-	bool is_viewer_requiring_visuals(uint32_t viewer_id) const;
-	void set_viewer_requires_collisions(uint32_t viewer_id, bool enabled);
-	bool is_viewer_requiring_collisions(uint32_t viewer_id) const;
-	void set_viewer_requires_data_block_notifications(uint32_t viewer_id, bool enabled);
-	bool is_viewer_requiring_data_block_notifications(uint32_t viewer_id) const;
-	void set_viewer_network_peer_id(uint32_t viewer_id, int peer_id);
-	int get_viewer_network_peer_id(uint32_t viewer_id) const;
-	bool viewer_exists(uint32_t viewer_id) const;
+	ViewerID add_viewer(VoxelViewer* ref);
+	void remove_viewer(ViewerID viewer_id);
+	void set_viewer_position(ViewerID viewer_id, Vector3 position);
+	void set_viewer_distance(ViewerID viewer_id, unsigned int distance);
+	unsigned int get_viewer_distance(ViewerID viewer_id) const;
+	void set_viewer_requires_visuals(ViewerID viewer_id, bool enabled);
+	bool is_viewer_requiring_visuals(ViewerID viewer_id) const;
+	void set_viewer_requires_collisions(ViewerID viewer_id, bool enabled);
+	bool is_viewer_requiring_collisions(ViewerID viewer_id) const;
+	void set_viewer_requires_data_block_notifications(ViewerID viewer_id, bool enabled);
+	bool is_viewer_requiring_data_block_notifications(ViewerID viewer_id) const;
+	void set_viewer_network_peer_id(ViewerID viewer_id, int peer_id);
+	int get_viewer_network_peer_id(ViewerID viewer_id) const;
+	bool viewer_exists(ViewerID viewer_id) const;
 
 	template <typename F>
 	inline void for_each_viewer(F f) const {
-		_world.viewers.for_each_with_id(f);
+		_world.viewers.for_each_key_value(f);
 	}
 
 	void push_main_thread_time_spread_task(
@@ -201,6 +205,7 @@ public:
 			unsigned int thread_count;
 			unsigned int active_threads;
 			unsigned int tasks;
+			FixedArray<const char *, ThreadedTaskRunner::MAX_THREADS> active_task_names;
 		};
 
 		ThreadPoolStats general;
@@ -270,8 +275,8 @@ private:
 	};
 
 	struct World {
-		StructDB<Volume> volumes;
-		StructDB<Viewer> viewers;
+		SlotMap<Volume, uint16_t, uint16_t> volumes;
+		SlotMap<Viewer, uint16_t, uint16_t> viewers;
 
 		// Must be overwritten with a new instance if count changes.
 		std::shared_ptr<PriorityDependency::ViewersData> shared_priority_dependency;

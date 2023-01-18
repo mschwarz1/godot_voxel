@@ -1,7 +1,8 @@
 #include "voxel_instance_library_multimesh_item_inspector_plugin.h"
 #include "../../terrain/instancing/voxel_instance_library_multimesh_item.h"
-#include "../../util/godot/button.h"
-#include "../../util/godot/label.h"
+#include "../../util/godot/classes/button.h"
+#include "../../util/godot/classes/label.h"
+#include "../../util/godot/core/string.h"
 #include "voxel_instance_library_editor_plugin.h"
 #include "voxel_instance_library_multimesh_item_editor_plugin.h"
 
@@ -41,6 +42,7 @@ void VoxelInstanceLibraryMultiMeshItemInspectorPlugin::_parse_group(Object *p_ob
 						.bind(item));
 #elif defined(ZN_GODOT_EXTENSION)
 		// TODO GDX: Need to use Callable::bind() but it has no implementation
+		// See https://github.com/godotengine/godot-cpp/issues/802
 		ZN_PRINT_ERROR("Unable to setup button to update `VoxelInstanceLibraryMultiMeshItem` from a scene with "
 					   "GDExtension! Callable::bind isn't working.");
 #endif

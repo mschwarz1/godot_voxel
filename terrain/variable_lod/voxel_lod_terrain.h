@@ -224,7 +224,7 @@ public:
 	// Internal
 
 	void set_instancer(VoxelInstancer *instancer);
-	uint32_t get_volume_id() const override {
+	VolumeID get_volume_id() const override {
 		return _volume_id;
 	}
 	std::shared_ptr<StreamingDependency> get_streaming_dependency() const override {
@@ -254,10 +254,10 @@ private:
 
 	void apply_mesh_update(VoxelEngine::BlockMeshOutput &ob);
 	void apply_data_block_response(VoxelEngine::BlockDataOutput &ob);
-	void apply_virtual_texture_update(VoxelEngine::BlockVirtualTextureOutput &ob);
-	void apply_virtual_texture_update_to_block(
-			VoxelMeshBlockVLT &block, VirtualTextureOutput &ob, unsigned int lod_index);
-	void try_apply_parent_virtual_texture_to_block(VoxelMeshBlockVLT &block, Vector3i bpos);
+	void apply_detail_texture_update(VoxelEngine::BlockDetailTextureOutput &ob);
+	void apply_detail_texture_update_to_block(
+			VoxelMeshBlockVLT &block, DetailTextureOutput &ob, unsigned int lod_index);
+	void try_apply_parent_detail_texture_to_block(VoxelMeshBlockVLT &block, Vector3i bpos);
 
 	void start_updater();
 	void stop_updater();
@@ -307,7 +307,7 @@ private:
 private:
 	friend class BuildTransitionMeshTask;
 
-	uint32_t _volume_id = 0;
+	VolumeID _volume_id;
 	ProcessCallback _process_callback = PROCESS_CALLBACK_IDLE;
 
 	Ref<Material> _material;
@@ -353,13 +353,13 @@ private:
 	// TODO Optimization: use FlatMap? Need to check how many blocks get in there, probably not many
 	FixedArray<std::map<Vector3i, VoxelMeshBlockVLT *>, constants::MAX_LOD> _fading_blocks_per_lod;
 
-	struct FadingVirtualTexture {
+	struct FadingDetailTexture {
 		Vector3i block_position;
 		uint32_t lod_index;
 		float progress;
 	};
 
-	std::vector<FadingVirtualTexture> _fading_virtual_textures;
+	std::vector<FadingDetailTexture> _fading_detail_textures;
 
 	VoxelInstancer *_instancer = nullptr;
 
@@ -375,7 +375,7 @@ private:
 	struct ApplyMeshUpdateTask : public ITimeSpreadTask {
 		void run(TimeSpreadTaskContext &ctx) override;
 
-		uint32_t volume_id = 0;
+		VolumeID volume_id;
 		VoxelLodTerrain *self = nullptr;
 		VoxelEngine::BlockMeshOutput data;
 	};

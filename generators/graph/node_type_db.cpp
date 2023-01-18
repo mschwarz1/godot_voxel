@@ -1,10 +1,10 @@
 #include "node_type_db.h"
 #include "../../constants/voxel_constants.h"
 #include "../../engine/compute_shader_resource.h"
-#include "../../util/godot/array.h"
-#include "../../util/godot/curve.h"
-#include "../../util/godot/fast_noise_lite.h"
-#include "../../util/godot/image.h"
+#include "../../util/godot/classes/curve.h"
+#include "../../util/godot/classes/fast_noise_lite.h"
+#include "../../util/godot/classes/image.h"
+#include "../../util/godot/core/array.h"
 #include "../../util/macros.h"
 #include "../../util/math/sdf.h"
 #include "../../util/noise/fast_noise_lite/fast_noise_lite.h"
@@ -2495,7 +2495,7 @@ VoxelGraphFunction::Port make_port_from_io_node(const ProgramGraph::Node &node, 
 			ZN_ASSERT(node.params.size() >= 1);
 			port.sub_index = node.params[0];
 			ZN_ASSERT(type.outputs.size() == 1);
-			port.name = type.outputs[0].name + "_" + String::num_int64(port.sub_index);
+			port.name = type.outputs[0].name + String("_") + String::num_int64(port.sub_index);
 			break;
 
 		default:

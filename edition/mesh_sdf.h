@@ -52,7 +52,7 @@ class GenMeshSDFSubBoxTask : public IThreadedTask {
 public:
 	struct SharedData {
 		std::vector<Triangle> triangles;
-		std::atomic_int pending_jobs;
+		std::atomic_int pending_jobs = { 0 };
 		VoxelBufferInternal buffer;
 		Vector3f min_pos;
 		Vector3f max_pos;
@@ -68,6 +68,10 @@ public:
 
 	// Called when `pending_jobs` reaches zero.
 	virtual void on_complete() {}
+
+	virtual const char *get_debug_name() const override {
+		return "GenMeshSDFSubBox";
+	}
 };
 
 // Computes a representation of the mesh that's more optimal to compute distance to triangles.

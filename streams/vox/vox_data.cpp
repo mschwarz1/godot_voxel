@@ -1,6 +1,6 @@
 #include "vox_data.h"
-#include "../../util/godot/array.h"
-#include "../../util/godot/file.h"
+#include "../../util/godot/classes/file.h"
+#include "../../util/godot/core/array.h"
 #include "../../util/log.h"
 #include "../../util/profiling.h"
 #include "../../util/string_funcs.h"
@@ -200,7 +200,7 @@ Error Data::_load_from_file(String fpath) {
 	// https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox.txt
 	// https://github.com/ephtracy/voxel-model/blob/master/MagicaVoxel-file-format-vox-extension.txt
 
-	ZN_PRINT_VERBOSE(format("Loading {}", GodotStringWrapper(fpath)));
+	ZN_PRINT_VERBOSE(format("Loading {}", fpath));
 
 	Error open_err;
 	Ref<FileAccess> f_ref = open_file(fpath, FileAccess::READ, open_err);
@@ -552,7 +552,7 @@ Error Data::_load_from_file(String fpath) {
 		ERR_FAIL_COND_V_MSG(_root_node_id == -1, ERR_INVALID_DATA, "Root node not found");
 	}
 
-	ZN_PRINT_VERBOSE(format("Done loading {}", GodotStringWrapper(fpath)));
+	ZN_PRINT_VERBOSE(format("Done loading {}", fpath));
 
 	return OK;
 }

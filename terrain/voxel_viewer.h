@@ -1,7 +1,8 @@
 #ifndef VOXEL_VIEWER_H
 #define VOXEL_VIEWER_H
 
-#include "../util/godot/node_3d.h"
+#include "../engine/ids.h"
+#include "../util/godot/classes/node_3d.h"
 
 namespace zylann::voxel {
 
@@ -37,7 +38,7 @@ private:
 
 	bool is_active() const;
 
-	uint32_t _viewer_id = 0;
+	ViewerID _viewer_id;
 	unsigned int _view_distance = 128;
 	bool _requires_visuals = true;
 	bool _requires_collisions = true;

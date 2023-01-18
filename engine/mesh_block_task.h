@@ -3,9 +3,10 @@
 
 #include "../constants/voxel_constants.h"
 #include "../storage/voxel_buffer_internal.h"
-#include "../util/godot/array_mesh.h"
+#include "../util/godot/classes/array_mesh.h"
 #include "../util/tasks/threaded_task.h"
-#include "distance_normalmaps.h"
+#include "detail_rendering.h"
+#include "ids.h"
 #include "meshing_dependency.h"
 #include "priority_dependency.h"
 
@@ -19,6 +20,10 @@ public:
 	MeshBlockTask();
 	~MeshBlockTask();
 
+	const char *get_debug_name() const override {
+		return "MeshBlock";
+	}
+
 	void run(ThreadedTaskContext ctx) override;
 	TaskPriority get_priority() override;
 	bool is_cancelled() override;
@@ -31,8 +36,9 @@ public:
 	// TODO Need to provide format
 	// FixedArray<uint8_t, VoxelBufferInternal::MAX_CHANNELS> channel_depths;
 	Vector3i mesh_block_position; // In mesh blocks of the specified lod
+	VolumeID volume_id;
 	Vector3d mesh_block_position_offset; // In mesh blocks of the specified lod
-	uint32_t volume_id;
+
 	uint8_t lod_index = 0;
 	uint8_t blocks_count = 0;
 	uint8_t data_block_size = 0;
@@ -46,8 +52,8 @@ public:
 	PriorityDependency priority_dependency;
 	std::shared_ptr<MeshingDependency> meshing_dependency;
 	std::shared_ptr<VoxelData> data;
-	NormalMapSettings virtual_texture_settings;
-	Ref<VoxelGenerator> virtual_texture_generator_override;
+	DetailRenderingSettings detail_texture_settings;
+	Ref<VoxelGenerator> detail_texture_generator_override;
 
 private:
 	bool _has_run = false;
@@ -56,7 +62,7 @@ private:
 	VoxelMesher::Output _surfaces_output;
 	Ref<Mesh> _mesh;
 	std::vector<uint8_t> _mesh_material_indices; // Indexed by mesh surface
-	std::shared_ptr<VirtualTextureOutput> _virtual_textures;
+	std::shared_ptr<DetailTextureOutput> _detail_textures;
 };
 
 Ref<ArrayMesh> build_mesh(Span<const VoxelMesher::Output::Surface> surfaces, Mesh::PrimitiveType primitive, int flags,

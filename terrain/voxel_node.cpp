@@ -3,7 +3,8 @@
 #include "../generators/voxel_generator.h"
 #include "../meshers/voxel_mesher.h"
 #include "../streams/voxel_stream.h"
-#include "../util/godot/script.h"
+#include "../util/godot/classes/script.h"
+#include "../util/godot/core/string.h"
 
 namespace zylann::voxel {
 
@@ -42,9 +43,9 @@ void VoxelNode::remesh_all_blocks() {
 	// Not implemented
 }
 
-uint32_t VoxelNode::get_volume_id() const {
+VolumeID VoxelNode::get_volume_id() const {
 	CRASH_NOW_MSG("Not implemented");
-	return 0;
+	return VolumeID();
 }
 
 std::shared_ptr<StreamingDependency> VoxelNode::get_streaming_dependency() const {

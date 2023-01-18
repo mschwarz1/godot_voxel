@@ -1,10 +1,10 @@
 #include "voxel_instance_library_multimesh_item_editor_plugin.h"
-#include "../../util/godot/callable.h"
-#include "../../util/godot/control.h"
-#include "../../util/godot/editor_file_dialog.h"
-#include "../../util/godot/editor_interface.h"
-#include "../../util/godot/editor_undo_redo_manager.h"
-#include "../../util/godot/resource_loader.h"
+#include "../../util/godot/classes/control.h"
+#include "../../util/godot/classes/editor_file_dialog.h"
+#include "../../util/godot/classes/editor_interface.h"
+#include "../../util/godot/classes/editor_undo_redo_manager.h"
+#include "../../util/godot/classes/resource_loader.h"
+#include "../../util/godot/core/callable.h"
 
 namespace zylann::voxel {
 
@@ -101,7 +101,7 @@ static void update_multimesh_item_from_scene(
 
 void VoxelInstanceLibraryMultiMeshItemEditorPlugin::_on_open_scene_dialog_file_selected(String fpath) {
 	ERR_FAIL_COND(_item.is_null());
-	update_multimesh_item_from_scene(**_item, fpath, **get_undo_redo());
+	update_multimesh_item_from_scene(**_item, fpath, *get_undo_redo());
 	// We are done with this item
 	_item.unref();
 }

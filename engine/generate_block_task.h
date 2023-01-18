@@ -2,6 +2,7 @@
 #define GENERATE_BLOCK_TASK_H
 
 #include "../util/tasks/threaded_task.h"
+#include "ids.h"
 #include "priority_dependency.h"
 #include "streaming_dependency.h"
 
@@ -18,6 +19,10 @@ public:
 	GenerateBlockTask();
 	~GenerateBlockTask();
 
+	const char *get_debug_name() const override {
+		return "GenerateBlock";
+	}
+
 	void run(ThreadedTaskContext ctx) override;
 	TaskPriority get_priority() override;
 	bool is_cancelled() override;
@@ -27,7 +32,7 @@ public:
 
 	std::shared_ptr<VoxelBufferInternal> voxels;
 	Vector3i position;
-	uint32_t volume_id;
+	VolumeID volume_id;
 	uint8_t lod;
 	uint8_t block_size;
 	bool has_run = false;

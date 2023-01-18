@@ -13,13 +13,13 @@
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../storage/voxel_data.h"
 #include "../../util/container_funcs.h"
-#include "../../util/godot/array.h"
-#include "../../util/godot/concave_polygon_shape_3d.h"
-#include "../../util/godot/engine.h"
-#include "../../util/godot/scene_tree.h"
-#include "../../util/godot/script.h"
-#include "../../util/godot/shader_material.h"
-#include "../../util/godot/string.h"
+#include "../../util/godot/core/array.h"
+#include "../../util/godot/classes/concave_polygon_shape_3d.h"
+#include "../../util/godot/classes/engine.h"
+#include "../../util/godot/classes/scene_tree.h"
+#include "../../util/godot/classes/script.h"
+#include "../../util/godot/classes/shader_material.h"
+#include "../../util/godot/core/string.h"
 #include "../../util/macros.h"
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
@@ -84,7 +84,7 @@ VoxelCubeSphereTerrain::VoxelCubeSphereTerrain() {
 			}
 			self->apply_mesh_update(data);
 		}
-		uint32_t volume_id = 0;
+		VolumeID volume_id;
 		VoxelCubeSphereTerrain *self = nullptr;
 		VoxelEngine::BlockMeshOutput data;
 	};
@@ -313,7 +313,7 @@ void VoxelCubeSphereTerrain::set_mesher(Ref<VoxelMesher> mesher) {
 	update_configuration_warnings();
 }
 
-void VoxelCubeSphereTerrain::get_viewers_in_area(std::vector<int> &out_viewer_ids, Box3i voxel_box) const {
+void VoxelCubeSphereTerrain::get_viewers_in_area(std::vector<ViewerID> &out_viewer_ids, Box3i voxel_box) const {
 	const Box3i block_box = voxel_box.downscaled(get_data_block_size());
 
 	for (auto it = _paired_viewers.begin(); it != _paired_viewers.end(); ++it) {
@@ -833,7 +833,7 @@ static void init_sparse_grid_priority_dependency(PriorityDependency &dep, Vector
 			math::squared(shared_viewers_data->highest_view_distance + 2.f * transformed_block_radius);
 }
 
-static void request_block_load(uint32_t volume_id, std::shared_ptr<StreamingDependency> stream_dependency,
+static void request_block_load(VolumeID volume_id, std::shared_ptr<StreamingDependency> stream_dependency,
 		uint32_t data_block_size, Vector3i block_pos,
 		std::shared_ptr<PriorityDependency::ViewersData> &shared_viewers_data, const Transform3D volume_transform,
 		bool request_instances) {
@@ -935,7 +935,7 @@ void VoxelCubeSphereTerrain::emit_data_block_unloaded(Vector3i bpos) {
 	emit_signal(VoxelStringNames::get_singleton().block_unloaded, bpos);
 }
 
-bool VoxelCubeSphereTerrain::try_get_paired_viewer_index(uint32_t id, size_t &out_i) const {
+bool VoxelCubeSphereTerrain::try_get_paired_viewer_index(ViewerID id, size_t &out_i) const {
 	for (size_t i = 0; i < _paired_viewers.size(); ++i) {
 		const PairedViewer &p = _paired_viewers[i];
 		if (p.id == id) {
@@ -947,7 +947,7 @@ bool VoxelCubeSphereTerrain::try_get_paired_viewer_index(uint32_t id, size_t &ou
 }
 
 // TODO It is unclear yet if this API will stay. I have a feeling it might consume a lot of CPU
-void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block, Vector3i bpos, uint32_t viewer_id) {
+void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block, Vector3i bpos, ViewerID viewer_id) {
 	if (!VoxelEngine::get_singleton().viewer_exists(viewer_id)) {
 		// The viewer might have been removed between the moment we requested the block and the moment we finished
 		// loading it
@@ -1067,7 +1067,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 			const float view_distance_scale;
 			const bool _debug;
 
-			inline void operator()(const VoxelEngine::Viewer &viewer, uint32_t viewer_id) {
+			inline void operator()(ViewerID viewer_id, const VoxelEngine::Viewer &viewer) {
 				size_t paired_viewer_index;
 				if (!self.try_get_paired_viewer_index(viewer_id, paired_viewer_index)) {
 					PairedViewer p;
@@ -1359,7 +1359,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 }
 
 void VoxelCubeSphereTerrain::process_viewer_data_box_change(
-		uint32_t viewer_id, Box3i prev_data_box, Box3i new_data_box, bool can_load_blocks) {
+		ViewerID viewer_id, Box3i prev_data_box, Box3i new_data_box, bool can_load_blocks) {
 	ZN_PROFILE_SCOPE();
 
 	static thread_local std::vector<Vector3i> tls_missing_blocks;
@@ -1540,7 +1540,7 @@ void VoxelCubeSphereTerrain::apply_data_block_response(VoxelEngine::BlockDataOut
 	emit_data_block_loaded(block_pos);
 
 	for (unsigned int i = 0; i < loading_block.viewers_to_notify.size(); ++i) {
-		const uint32_t viewer_id = loading_block.viewers_to_notify[i];
+		const ViewerID viewer_id = loading_block.viewers_to_notify[i];
 		notify_data_block_enter(block, block_pos, viewer_id);
 	}
 
@@ -1900,15 +1900,15 @@ bool VoxelCubeSphereTerrain::_b_try_set_block_data(Vector3i position, Ref<gd::Vo
 
 PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
 		Vector3i area_origin, Vector3i area_size) const {
-	static thread_local std::vector<int> s_ids;
-	std::vector<int> &viewer_ids = s_ids;
+	static thread_local std::vector<ViewerID> s_ids;
+	std::vector<ViewerID> &viewer_ids = s_ids;
 	viewer_ids.clear();
 	get_viewers_in_area(viewer_ids, Box3i(area_origin, area_size));
 
 	PackedInt32Array peer_ids;
 	peer_ids.resize(viewer_ids.size());
-	// Using direct access because when compiling with GodotCpp the array access syntax is different, also it is a
-	// bit faster
+	// Using direct access because when compiling with GodotCpp the array access syntax is different, also it is a bit
+	// faster
 	int32_t *peer_ids_data = peer_ids.ptrw();
 	ZN_ASSERT_RETURN_V(peer_ids_data != nullptr, peer_ids);
 	for (size_t i = 0; i < viewer_ids.size(); ++i) {

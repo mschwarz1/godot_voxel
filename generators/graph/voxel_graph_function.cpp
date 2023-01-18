@@ -1,11 +1,13 @@
 #include "voxel_graph_function.h"
 #include "../../constants/voxel_string_names.h"
 #include "../../util/container_funcs.h"
-#include "../../util/godot/callable.h"
+#include "../../util/godot/classes/object.h"
+#include "../../util/godot/core/array.h" // for `varray` in GDExtension builds
+#include "../../util/godot/core/callable.h"
 #include "../../util/godot/funcs.h"
-#include "../../util/godot/object.h"
 #include "../../util/string_funcs.h"
 #include "node_type_db.h"
+
 #include <algorithm>
 
 namespace zylann::voxel::pg {
@@ -387,7 +389,7 @@ void VoxelGraphFunction::set_node_name(uint32_t node_id, StringName name) {
 	if (name != StringName()) {
 		const uint32_t existing_node_id = _graph.find_node_by_name(name);
 		if (existing_node_id != ProgramGraph::NULL_ID && node_id == existing_node_id) {
-			ZN_PRINT_ERROR(format("More than one graph node has the name \"{}\"", GodotStringWrapper(String(name))));
+			ZN_PRINT_ERROR(format("More than one graph node has the name \"{}\"", String(name)));
 		}
 	}
 	node->name = name;
@@ -1269,8 +1271,10 @@ void VoxelGraphFunction::_b_set_node_name(int node_id, String name) {
 PackedInt32Array to_godot_int32_array(const std::vector<uint32_t> &vec) {
 	PackedInt32Array a;
 	a.resize(vec.size());
+	// Using pointer access because in GDExtension builds writing into a packed array has different syntax
+	int32_t *p = a.ptrw();
 	for (unsigned int i = 0; i < vec.size(); ++i) {
-		a.write[i] = vec[i];
+		p[i] = vec[i];
 	}
 	return a;
 }

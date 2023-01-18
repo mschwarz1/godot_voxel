@@ -2,7 +2,9 @@
 #define ZN_VOXEL_GENERATE_INSTANCES_BLOCK_TASK_H
 
 #include "../../util/tasks/threaded_task.h"
+#include "../../util/thread/mutex.h"
 #include "voxel_instance_generator.h"
+
 #include <memory>
 
 namespace zylann::voxel {
@@ -34,6 +36,10 @@ public:
 	// Can be pre-populated by edited transforms
 	std::vector<Transform3f> transforms;
 	std::shared_ptr<VoxelInstancerGeneratorTaskOutputQueue> output_queue;
+
+	const char *get_debug_name() const override {
+		return "GenerateInstancesBlock";
+	}
 
 	void run(ThreadedTaskContext ctx) override;
 };

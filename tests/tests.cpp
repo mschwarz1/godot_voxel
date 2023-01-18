@@ -15,14 +15,16 @@
 #include "../streams/voxel_block_serializer_gd.h"
 #include "../util/container_funcs.h"
 #include "../util/flat_map.h"
-#include "../util/godot/box_shape_3d.h"
+#include "../util/godot/classes/box_shape_3d.h"
+#include "../util/godot/classes/time.h"
 #include "../util/godot/funcs.h"
 #include "../util/island_finder.h"
 #include "../util/math/box3i.h"
+#include "../util/slot_map.h"
 #include "../util/string_funcs.h"
 #include "../util/tasks/threaded_task_runner.h"
+#include "test_detail_rendering_gpu.h"
 #include "test_expression_parser.h"
-#include "test_normalmap_render_gpu.h"
 #include "test_octree.h"
 #include "test_voxel_graph.h"
 #include "testing.h"
@@ -1100,7 +1102,7 @@ void test_fast_noise_2_basic() {
 	float nv = noise->get_noise_2d_single(Vector2(42, 666));
 	print_line(String("SIMD level: {0}").format(varray(FastNoise2::get_simd_level_name(noise->get_simd_level()))));
 	print_line(String("Noise: {0}").format(varray(nv)));
-	Ref<Image> im = Image::create_empty(256, 256, false, Image::FORMAT_RGB8);
+	Ref<Image> im = create_empty_image(256, 256, false, Image::FORMAT_RGB8);
 	noise->generate_image(im, false);
 	// im->save_png("zylann_test_fastnoise2.png");
 }
@@ -1554,13 +1556,13 @@ void test_voxel_mesher_cubes() {
 	ZN_TEST_ASSERT(surface1_vertices_count == 20);
 }
 
-void test_threaded_task_runner() {
+void test_threaded_task_runner_misc() {
 	static const uint32_t task_duration_usec = 100'000;
 
 	struct TaskCounter {
-		std::atomic_uint32_t max_count;
-		std::atomic_uint32_t current_count;
-		std::atomic_uint32_t completed_count;
+		std::atomic_uint32_t max_count = { 0 };
+		std::atomic_uint32_t current_count = { 0 };
+		std::atomic_uint32_t completed_count = { 0 };
 
 		void reset() {
 			max_count = 0;
@@ -1674,6 +1676,133 @@ void test_threaded_task_runner() {
 	ZN_TEST_ASSERT(serial_counter->current_count == 0);
 }
 
+void test_threaded_task_runner_debug_names() {
+	class NamedTestTask1 : public IThreadedTask {
+	public:
+		unsigned int sleep_amount_usec;
+
+		NamedTestTask1(int p_sleep_amount_usec) : sleep_amount_usec(p_sleep_amount_usec) {}
+
+		void run(ThreadedTaskContext ctx) override {
+			ZN_PROFILE_SCOPE();
+			Thread::sleep_usec(sleep_amount_usec);
+		}
+
+		const char *get_debug_name() const override {
+			return "NamedTestTask1";
+		}
+	};
+
+	class NamedTestTask2 : public IThreadedTask {
+	public:
+		unsigned int sleep_amount_usec;
+
+		NamedTestTask2(int p_sleep_amount_usec) : sleep_amount_usec(p_sleep_amount_usec) {}
+
+		void run(ThreadedTaskContext ctx) override {
+			ZN_PROFILE_SCOPE();
+			Thread::sleep_usec(sleep_amount_usec);
+		}
+
+		const char *get_debug_name() const override {
+			return "NamedTestTask2";
+		}
+	};
+
+	struct L {
+		static void dequeue_tasks(ThreadedTaskRunner &runner, unsigned int &r_in_flight_count) {
+			runner.dequeue_completed_tasks([&r_in_flight_count](IThreadedTask *task) {
+				ZN_ASSERT(task != nullptr);
+				task->apply_result();
+				ZN_DELETE(task);
+				ZN_ASSERT(r_in_flight_count > 0);
+				--r_in_flight_count;
+			});
+		}
+	};
+
+	const unsigned int test_thread_count = 4;
+	const unsigned int hw_concurrency = Thread::get_hardware_concurrency();
+	if (hw_concurrency < test_thread_count) {
+		ZN_PRINT_WARNING(format(
+				"Hardware concurrency is {}, smaller than test requirement {}", test_thread_count, hw_concurrency));
+	}
+
+	ThreadedTaskRunner runner;
+	runner.set_thread_count(test_thread_count);
+	runner.set_batch_count(1);
+	runner.set_name("Test");
+
+	const uint64_t time_before = Time::get_singleton()->get_ticks_msec();
+
+	unsigned int in_flight_count = 0;
+
+	Dictionary name_counts;
+
+	while (Time::get_singleton()->get_ticks_msec() - time_before < 5000) {
+		ZN_PROFILE_SCOPE();
+
+		// Saturate task queue so a bunch should be running while we query their names
+		while (in_flight_count < 5000) {
+			for (unsigned int i = 0; i < 1000; ++i) {
+				if ((i % 3) != 0) {
+					runner.enqueue(ZN_NEW(NamedTestTask1(100 + i % 11)), false);
+				} else {
+					runner.enqueue(ZN_NEW(NamedTestTask2(60 + i % 7)), true);
+				}
+				++in_flight_count;
+			}
+		}
+
+		// Get debug task names
+		FixedArray<const char *, ThreadedTaskRunner::MAX_THREADS> active_task_names;
+		fill(active_task_names, (const char *)nullptr);
+		for (unsigned int i = 0; i < test_thread_count; ++i) {
+			active_task_names[i] = runner.get_thread_debug_task_name(i);
+		}
+
+		// Put task names into an array
+		Array task_names;
+		task_names.resize(test_thread_count);
+		for (unsigned int i = 0; i < active_task_names.size(); ++i) {
+			const char *name = active_task_names[i];
+			if (name != nullptr) {
+				task_names[i] = name;
+			}
+		}
+
+		// Count names
+		for (int i = 0; i < task_names.size(); ++i) {
+			Variant name = task_names[i];
+			Variant count = name_counts[name];
+			if (count.get_type() != Variant::INT) {
+				count = 1;
+			} else {
+				count = int64_t(count) + 1;
+			}
+			name_counts[name] = count;
+		}
+
+		L::dequeue_tasks(runner, in_flight_count);
+
+		OS::get_singleton()->delay_usec(10'000);
+	}
+
+	runner.wait_for_all_tasks();
+	L::dequeue_tasks(runner, in_flight_count);
+
+	// Print how many times each name came up.
+	// Doing this to check if the test runs as expected and to prevent compiler optimization on getting the names
+	String s;
+	Array keys = name_counts.keys();
+	for (int i = 0; i < keys.size(); ++i) {
+		String name = keys[i];
+		Variant count = name_counts[name];
+		s += String("{0}: {1}; ").format(varray(name, count));
+	}
+	print_line(s);
+}
+
 void test_task_priority_values() {
 	ZN_TEST_ASSERT(TaskPriority(0, 0, 0, 0) < TaskPriority(1, 0, 0, 0));
 	ZN_TEST_ASSERT(TaskPriority(0, 0, 0, 0) < TaskPriority(0, 0, 0, 1));
@@ -1706,6 +1835,43 @@ void test_issue463() {
 	ZN_ASSERT(msdf->has_method("_set_data"));
 	// Setting invalid data should cause an error but not crash or leak
 	msdf->call("_set_data", d);
+}
+
+void test_slot_map() {
+	SlotMap<int> map;
+
+	const SlotMap<int>::Key key1 = map.add(1);
+	const SlotMap<int>::Key key2 = map.add(2);
+	const SlotMap<int>::Key key3 = map.add(3);
+
+	ZN_TEST_ASSERT(key1 != key2 && key2 != key3);
+	ZN_TEST_ASSERT(map.exists(key1));
+	ZN_TEST_ASSERT(map.exists(key2));
+	ZN_TEST_ASSERT(map.exists(key3));
+	ZN_TEST_ASSERT(map.count() == 3);
+
+	map.remove(key2);
+	ZN_TEST_ASSERT(map.exists(key1));
+	ZN_TEST_ASSERT(!map.exists(key2));
+	ZN_TEST_ASSERT(map.exists(key3));
+	ZN_TEST_ASSERT(map.count() == 2);
+
+	const SlotMap<int>::Key key4 = map.add(4);
+	ZN_TEST_ASSERT(key4 != key2);
+	ZN_TEST_ASSERT(map.count() == 3);
+
+	const int v1 = map.get(key1);
+	const int v4 = map.get(key4);
+	const int v3 = map.get(key3);
+	ZN_TEST_ASSERT(v1 == 1);
+	ZN_TEST_ASSERT(v4 == 4);
+	ZN_TEST_ASSERT(v3 == 3);
+
+	map.clear();
+	ZN_TEST_ASSERT(!map.exists(key1));
+	ZN_TEST_ASSERT(!map.exists(key4));
+	ZN_TEST_ASSERT(!map.exists(key3));
+	ZN_TEST_ASSERT(map.count() == 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1771,10 +1937,12 @@ void run_voxel_tests() {
 	VOXEL_TEST(test_voxel_buffer_metadata);
 	VOXEL_TEST(test_voxel_buffer_metadata_gd);
 	VOXEL_TEST(test_voxel_mesher_cubes);
-	VOXEL_TEST(test_threaded_task_runner);
+	VOXEL_TEST(test_threaded_task_runner_misc);
+	VOXEL_TEST(test_threaded_task_runner_debug_names);
 	VOXEL_TEST(test_task_priority_values);
 	VOXEL_TEST(test_issue463);
 	VOXEL_TEST(test_normalmap_render_gpu);
+	VOXEL_TEST(test_slot_map);
 
 	print_line("------------ Voxel tests end -------------");
 }

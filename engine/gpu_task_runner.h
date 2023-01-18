@@ -8,6 +8,9 @@
 #include <vector>
 
 ZN_GODOT_FORWARD_DECLARE(class RenderingDevice)
+#ifdef ZN_GODOT_EXTENSION
+using namespace godot;
+#endif
 
 namespace zylann::voxel {
 
@@ -26,6 +29,7 @@ public:
 	virtual void collect(GPUTaskContext &ctx) = 0;
 };
 
+// Runs tasks that schedules compute shaders and collects their results.
 class GPUTaskRunner {
 public:
 	GPUTaskRunner();

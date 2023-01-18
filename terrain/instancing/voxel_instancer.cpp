@@ -2,15 +2,15 @@
 #include "../../engine/save_block_data_task.h"
 #include "../../util/container_funcs.h"
 #include "../../util/dstack.h"
-#include "../../util/godot/array.h"
-#include "../../util/godot/camera_3d.h"
-#include "../../util/godot/collision_shape_3d.h"
-#include "../../util/godot/mesh_instance_3d.h"
-#include "../../util/godot/multimesh.h"
-#include "../../util/godot/node.h"
-#include "../../util/godot/ref_counted.h"
-#include "../../util/godot/resource_saver.h"
-#include "../../util/godot/viewport.h"
+#include "../../util/godot/classes/camera_3d.h"
+#include "../../util/godot/classes/collision_shape_3d.h"
+#include "../../util/godot/classes/mesh_instance_3d.h"
+#include "../../util/godot/classes/multimesh.h"
+#include "../../util/godot/classes/node.h"
+#include "../../util/godot/classes/ref_counted.h"
+#include "../../util/godot/classes/resource_saver.h"
+#include "../../util/godot/classes/viewport.h"
+#include "../../util/godot/core/array.h"
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
 #include "../../util/string_funcs.h"
@@ -21,8 +21,8 @@
 #include "voxel_instance_library_scene_item.h"
 #include "voxel_instancer_rigidbody.h"
 
-// Only needed or debug purposes, otherwise RenderingServer is used directly
-#include "../../util/godot/multimesh_instance_3d.h"
+// Only needed for debug purposes, otherwise RenderingServer is used directly
+#include "../../util/godot/classes/multimesh_instance_3d.h"
 
 #include <algorithm>
 
@@ -1064,13 +1064,17 @@ void VoxelInstancer::update_block_from_transforms(int block_index, Span<const Tr
 			PackedFloat32Array bulk_array;
 			DirectMultiMeshInstance::make_transform_3d_bulk_array(transforms, bulk_array);
 			multimesh->set_instance_count(transforms.size());
-			// TODO Waiting for Godot to expose the method on the resource object
-			// multimesh->set_as_bulk_array(bulk_array);
-			RenderingServer::get_singleton()->multimesh_set_buffer(multimesh->get_rid(), bulk_array);
 
+			// Setting the mesh BEFORE `multimesh_set_buffer` because otherwise Godot computes the AABB inside
+			// `multimesh_set_buffer` BY DOWNLOADING BACK THE BUFFER FROM THE GRAPHICS CARD which can incur a very harsh
+			// performance penalty
 			if (settings.mesh_lod_count > 0) {
 				multimesh->set_mesh(settings.mesh_lods[settings.mesh_lod_count - 1]);
 			}
+
+			// TODO Waiting for Godot to expose the method on the resource object
+			// multimesh->set_as_bulk_array(bulk_array);
+			RenderingServer::get_singleton()->multimesh_set_buffer(multimesh->get_rid(), bulk_array);
 
 			if (!block.multimesh_instance.is_valid()) {
 				block.multimesh_instance.create();
@@ -1477,7 +1481,7 @@ SaveBlockDataTask *VoxelInstancer::save_block(
 		}
 	}
 
-	const int volume_id = _parent->get_volume_id();
+	const VolumeID volume_id = _parent->get_volume_id();
 
 	std::shared_ptr<StreamingDependency> stream_dependency = _parent->get_streaming_dependency();
 	ZN_ASSERT(stream_dependency != nullptr);
@@ -1835,13 +1839,12 @@ Node *VoxelInstancer::debug_dump_as_nodes() const {
 	std::unordered_map<Ref<Mesh>, Ref<Mesh>> mesh_copies;
 
 	// For each layer
-	const int *layer_key = nullptr;
 	for (auto layer_it = _layers.begin(); layer_it != _layers.end(); ++layer_it) {
 		const Layer &layer = layer_it->second;
 		const int lod_block_size = mesh_block_size << layer.lod_index;
 
 		Node3D *layer_node = memnew(Node3D);
-		layer_node->set_name(String("Layer{0}").format(varray(*layer_key)));
+		layer_node->set_name(String("Layer{0}").format(varray(layer_it->first)));
 		root->add_child(layer_node);
 
 		// For each block in layer

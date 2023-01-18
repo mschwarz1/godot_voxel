@@ -1,17 +1,17 @@
 #include "voxel_terrain_editor_plugin.h"
 #include "../../engine/voxel_engine_gd.h"
 #include "../../generators/voxel_generator.h"
-#include "../../storage/modifiers_gd.h"
+#include "../../modifiers/godot/voxel_modifier_gd.h"
 #include "../../terrain/fixed_lod/voxel_terrain.h"
 #include "../../terrain/variable_lod/voxel_lod_terrain.h"
+#include "../../util/godot/classes/camera_3d.h"
+#include "../../util/godot/classes/editor_interface.h"
+#include "../../util/godot/classes/menu_button.h"
+#include "../../util/godot/classes/node.h"
+#include "../../util/godot/classes/popup_menu.h"
+#include "../../util/godot/core/callable.h"
 #include "../../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
-#include "../../util/godot/callable.h"
-#include "../../util/godot/camera_3d.h"
-#include "../../util/godot/editor_interface.h"
 #include "../../util/godot/funcs.h"
-#include "../../util/godot/menu_button.h"
-#include "../../util/godot/node.h"
-#include "../../util/godot/popup_menu.h"
 #include "../about_window.h"
 #include "../graph/voxel_graph_node_inspector_wrapper.h"
 #include "voxel_terrain_editor_task_indicator.h"
@@ -163,6 +163,7 @@ void VoxelTerrainEditorPlugin::set_node(VoxelNode *node) {
 		_node->disconnect("tree_exited", ZN_GODOT_CALLABLE_MP(this, VoxelTerrainEditorPlugin, _on_terrain_tree_exited));
 #else
 // TODO GDX: Callable::bind() isn't implemented, can't use this signal
+// See https://github.com/godotengine/godot-cpp/issues/802
 #endif
 
 		VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_node);
@@ -181,6 +182,7 @@ void VoxelTerrainEditorPlugin::set_node(VoxelNode *node) {
 				ZN_GODOT_CALLABLE_MP(this, VoxelTerrainEditorPlugin, _on_terrain_tree_exited).bind(_node));
 #else
 // TODO GDX: Callable::bind() isn't implemented, can't use this signal
+// See https://github.com/godotengine/godot-cpp/issues/802
 #endif
 
 		VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_node);

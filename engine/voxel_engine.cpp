@@ -1,6 +1,9 @@
 #include "voxel_engine.h"
 #include "../constants/voxel_constants.h"
 #include "../shaders/shaders.h"
+#include "../util/godot/classes/rd_sampler_state.h"
+#include "../util/godot/classes/rendering_device.h"
+#include "../util/godot/classes/rendering_server.h"
 #include "../util/log.h"
 #include "../util/macros.h"
 #include "../util/profiling.h"
@@ -152,20 +155,20 @@ void VoxelEngine::wait_and_clear_all_tasks(bool warn) {
 	});
 }
 
-uint32_t VoxelEngine::add_volume(VolumeCallbacks callbacks) {
+VolumeID VoxelEngine::add_volume(VolumeCallbacks callbacks) {
 	ZN_ASSERT(callbacks.check_callbacks());
 	Volume volume;
 	volume.callbacks = callbacks;
-	return _world.volumes.create(volume);
+	return _world.volumes.add(volume);
 }
 
-VoxelEngine::VolumeCallbacks VoxelEngine::get_volume_callbacks(uint32_t volume_id) const {
+VoxelEngine::VolumeCallbacks VoxelEngine::get_volume_callbacks(VolumeID volume_id) const {
 	const Volume &volume = _world.volumes.get(volume_id);
 	return volume.callbacks;
 }
 
-void VoxelEngine::remove_volume(uint32_t volume_id) {
-	_world.volumes.destroy(volume_id);
+void VoxelEngine::remove_volume(VolumeID volume_id) {
+	_world.volumes.remove(volume_id);
 	// TODO How to cancel meshing tasks?
 
 	if (_world.volumes.count() == 0) {
@@ -175,78 +178,77 @@ void VoxelEngine::remove_volume(uint32_t volume_id) {
 	}
 }
 
-bool VoxelEngine::is_volume_valid(uint32_t volume_id) const {
-	return _world.volumes.is_valid(volume_id);
+bool VoxelEngine::is_volume_valid(VolumeID volume_id) const {
+	return _world.volumes.exists(volume_id);
 }
 
-uint32_t VoxelEngine::add_viewer(VoxelViewer* ref) {
-
+ViewerID VoxelEngine::add_viewer(VoxelViewer* ref) {
 	Viewer viewer = Viewer();
 	viewer.viewerRef = ref;
-	return _world.viewers.create(viewer);
+	return _world.viewers.add(viewer);
 }
 
-void VoxelEngine::remove_viewer(uint32_t viewer_id) {
-	_world.viewers.destroy(viewer_id);
+void VoxelEngine::remove_viewer(ViewerID viewer_id) {
+	_world.viewers.remove(viewer_id);
 }
 
-void VoxelEngine::set_viewer_position(uint32_t viewer_id, Vector3 position) {
+void VoxelEngine::set_viewer_position(ViewerID viewer_id, Vector3 position) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.world_position = position;
 }
 
-void VoxelEngine::set_viewer_distance(uint32_t viewer_id, unsigned int distance) {
+void VoxelEngine::set_viewer_distance(ViewerID viewer_id, unsigned int distance) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.view_distance = distance;
 }
 
-unsigned int VoxelEngine::get_viewer_distance(uint32_t viewer_id) const {
+unsigned int VoxelEngine::get_viewer_distance(ViewerID viewer_id) const {
 	const Viewer &viewer = _world.viewers.get(viewer_id);
 	return viewer.view_distance;
 }
 
-void VoxelEngine::set_viewer_requires_visuals(uint32_t viewer_id, bool enabled) {
+void VoxelEngine::set_viewer_requires_visuals(ViewerID viewer_id, bool enabled) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.require_visuals = enabled;
 }
 
-bool VoxelEngine::is_viewer_requiring_visuals(uint32_t viewer_id) const {
+bool VoxelEngine::is_viewer_requiring_visuals(ViewerID viewer_id) const {
 	const Viewer &viewer = _world.viewers.get(viewer_id);
 	return viewer.require_visuals;
 }
 
-void VoxelEngine::set_viewer_requires_collisions(uint32_t viewer_id, bool enabled) {
+void VoxelEngine::set_viewer_requires_collisions(ViewerID viewer_id, bool enabled) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.require_collisions = enabled;
 }
 
-bool VoxelEngine::is_viewer_requiring_collisions(uint32_t viewer_id) const {
+bool VoxelEngine::is_viewer_requiring_collisions(ViewerID viewer_id) const {
 	const Viewer &viewer = _world.viewers.get(viewer_id);
 	return viewer.require_collisions;
 }
 
-void VoxelEngine::set_viewer_requires_data_block_notifications(uint32_t viewer_id, bool enabled) {
+void VoxelEngine::set_viewer_requires_data_block_notifications(ViewerID viewer_id, bool enabled) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.requires_data_block_notifications = enabled;
 }
 
-bool VoxelEngine::is_viewer_requiring_data_block_notifications(uint32_t viewer_id) const {
+bool VoxelEngine::is_viewer_requiring_data_block_notifications(ViewerID viewer_id) const {
 	const Viewer &viewer = _world.viewers.get(viewer_id);
 	return viewer.requires_data_block_notifications;
 }
 
-void VoxelEngine::set_viewer_network_peer_id(uint32_t viewer_id, int peer_id) {
+void VoxelEngine::set_viewer_network_peer_id(ViewerID viewer_id, int peer_id) {
 	Viewer &viewer = _world.viewers.get(viewer_id);
 	viewer.network_peer_id = peer_id;
 }
 
-int VoxelEngine::get_viewer_network_peer_id(uint32_t viewer_id) const {
+int VoxelEngine::get_viewer_network_peer_id(ViewerID viewer_id) const {
 	const Viewer &viewer = _world.viewers.get(viewer_id);
 	return viewer.network_peer_id;
 }
 
-bool VoxelEngine::viewer_exists(uint32_t viewer_id) const {
-	return _world.viewers.is_valid(viewer_id);
+bool VoxelEngine::viewer_exists(ViewerID viewer_id) const {
+	return _world.viewers.exists(viewer_id);
 }
 
 void VoxelEngine::push_main_thread_time_spread_task(
@@ -323,7 +325,7 @@ void VoxelEngine::process() {
 		}
 		size_t i = 0;
 		unsigned int max_distance = 0;
-		_world.viewers.for_each([&i, &max_distance, this](Viewer &viewer) {
+		_world.viewers.for_each_value([&i, &max_distance, this](Viewer &viewer) {
 			_world.shared_priority_dependency->viewers[i] = viewer.world_position;
 			if (viewer.view_distance > max_distance) {
 				max_distance = viewer.view_distance;
@@ -353,6 +355,12 @@ static VoxelEngine::Stats::ThreadPoolStats debug_get_pool_stats(const zylann::Th
 	d.tasks = pool.get_debug_remaining_tasks();
 	d.active_threads = debug_get_active_thread_count(pool);
 	d.thread_count = pool.get_thread_count();
+
+	fill(d.active_task_names, (const char *)nullptr);
+	for (unsigned int i = 0; i < d.thread_count; ++i) {
+		d.active_task_names[i] = pool.get_thread_debug_task_name(i);
+	}
+
 	return d;
 }
 
