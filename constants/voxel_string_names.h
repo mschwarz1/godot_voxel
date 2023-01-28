@@ -21,6 +21,7 @@ public:
 	StringName _generate_block;
 	StringName _get_used_channels_mask;
 
+	StringName block_loading;
 	StringName block_loaded;
 	StringName block_unloaded;
 

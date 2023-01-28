@@ -30,12 +30,15 @@ public:
 	void set_network_peer_id(int id);
 	int get_network_peer_id() const;
 
+	void set_reparenting(bool reparenting);
+
 protected:
 	void _notification(int p_what);
 
 private:
 	static void _bind_methods();
-
+	bool _reparenting;
+	
 	bool is_active() const;
 
 	ViewerID _viewer_id;

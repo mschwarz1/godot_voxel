@@ -931,6 +931,20 @@ void VoxelCubeSphereTerrain::emit_data_block_loaded(Vector3i bpos) {
 	emit_signal(VoxelStringNames::get_singleton().block_loaded, bpos);
 }
 
+
+void VoxelCubeSphereTerrain::emit_data_block_loading(Vector3i bpos) {
+	// Not sure about exposing buffers directly... some stuff on them is useful to obtain directly,
+	// but also it allows scripters to mess with voxels in a way they should not.
+	// Example: modifying voxels without locking them first, while another thread may be reading them at the same
+	// time. The same thing could happen the other way around (threaded task modifying voxels while you try to read
+	// them). It isn't planned to expose VoxelBuffer locks because there are too many of them, it may likely shift
+	// to another system in the future, and might even be changed to no longer inherit Reference. So unless this is
+	// absolutely necessary, buffers aren't exposed. Workaround: use VoxelTool
+	// const Variant vbuffer = block->voxels;
+	// const Variant *args[2] = { &vpos, &vbuffer };
+	emit_signal(VoxelStringNames::get_singleton().block_loading, bpos);
+}
+
 void VoxelCubeSphereTerrain::emit_data_block_unloaded(Vector3i bpos) {
 	emit_signal(VoxelStringNames::get_singleton().block_unloaded, bpos);
 }
@@ -967,6 +981,19 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 #else
 	ERR_PRINT_ONCE("VoxelCubeSphereTerrain::_on_data_block_entered is not supported yet in GDExtension!");
 #endif
+}
+
+Vector3 VoxelCubeSphereTerrain::convert_block_pos_to_local_position(Vector3 block_position)
+{
+	Vector3 offsetPosition = Vector3();
+	Vector3 voxelPos = block_position * get_mesh_block_size();
+	Vector3d posOffset = CalculatePositionOffset(voxelPos);
+
+	offsetPosition.x = posOffset.x + voxelPos.x;
+	offsetPosition.y = posOffset.y + voxelPos.y;
+	offsetPosition.z = posOffset.z + voxelPos.z;
+	
+	return offsetPosition;
 }
 
 Vector3i VoxelCubeSphereTerrain::convert_position_to_vox_position(Vector3 local_position) {
@@ -1443,6 +1470,7 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 
 				// Schedule a loading request
 				_loading_blocks.insert({ missing_bpos, new_loading_block });
+				emit_data_block_loading(missing_bpos);
 				_blocks_pending_load.push_back(missing_bpos);
 
 			} else {
@@ -1970,6 +1998,7 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_mesh_block_size", "size"), &VoxelCubeSphereTerrain::set_mesh_block_size);
 
 	ClassDB::bind_method(D_METHOD("convert_position_to_vox_position", "local_position"), &VoxelCubeSphereTerrain::convert_position_to_vox_position);
+	ClassDB::bind_method(D_METHOD("convert_block_pos_to_local_position", "local_position"), &VoxelCubeSphereTerrain::convert_block_pos_to_local_position);
 
 	ClassDB::bind_method(D_METHOD("get_statistics"), &VoxelCubeSphereTerrain::_b_get_statistics);
 	ClassDB::bind_method(D_METHOD("get_voxel_tool"), &VoxelCubeSphereTerrain::get_voxel_tool);
@@ -2045,6 +2074,7 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mesh_block_size"), "set_mesh_block_size", "get_mesh_block_size");
 
 	// TODO Add back access to block, but with an API securing multithreaded access
+	ADD_SIGNAL(MethodInfo("block_loading", PropertyInfo(Variant::VECTOR3, "position")));
 	ADD_SIGNAL(MethodInfo("block_loaded", PropertyInfo(Variant::VECTOR3, "position")));
 	ADD_SIGNAL(MethodInfo("block_unloaded", PropertyInfo(Variant::VECTOR3, "position")));
 }

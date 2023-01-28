@@ -448,6 +448,7 @@ void VoxelTerrain::unview_mesh_block(Vector3i bpos, bool mesh_flag, bool collisi
 	// so that would mean we unview one without viewing it in the first place
 	ERR_FAIL_COND(block == nullptr);
 
+
 	if (mesh_flag) {
 		block->mesh_viewers.remove();
 		if (block->mesh_viewers.get() == 0) {
@@ -1065,7 +1066,7 @@ void VoxelTerrain::process_viewers() {
 	{
 		ZN_PROFILE_SCOPE();
 
-		for (size_t i = 0; i < _paired_viewers.size(); ++i) {
+		for (int i = _paired_viewers.size() - 1; i >= 0; --i) {
 			const PairedViewer &viewer = _paired_viewers[i];
 
 			{

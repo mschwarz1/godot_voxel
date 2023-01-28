@@ -35,7 +35,7 @@ public:
 	Vector3i currentVoxPosition;
 
 	Vector3i convert_position_to_vox_position(Vector3 local_position);
-
+	Vector3 convert_block_pos_to_local_position(Vector3 block_pos);
 
 	void set_stream(Ref<VoxelStream> p_stream) override;
 	Ref<VoxelStream> get_stream() const override;
@@ -201,6 +201,7 @@ private:
 	void consume_block_data_save_requests(
 			BufferedTaskScheduler &task_scheduler, std::shared_ptr<AsyncDependencyTracker> saving_tracker);
 
+	void emit_data_block_loading(Vector3i bpos);
 	void emit_data_block_loaded(Vector3i bpos);
 	void emit_data_block_unloaded(Vector3i bpos);
 

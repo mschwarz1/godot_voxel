@@ -28,6 +28,7 @@ VoxelStringNames::VoxelStringNames() {
 	_generate_block = StringName("_generate_block");
 	_get_used_channels_mask = StringName("_get_used_channels_mask");
 
+	block_loading = StringName("block_loading");
 	block_loaded = StringName("block_loaded");
 	block_unloaded = StringName("block_unloaded");
 

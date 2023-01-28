@@ -182,10 +182,10 @@ bool VoxelEngine::is_volume_valid(VolumeID volume_id) const {
 	return _world.volumes.exists(volume_id);
 }
 
-ViewerID VoxelEngine::add_viewer(VoxelViewer* ref) {
-	Viewer viewer = Viewer();
-	viewer.viewerRef = ref;
-	return _world.viewers.add(viewer);
+ViewerID VoxelEngine::add_viewer() {
+	//Viewer viewer = Viewer();
+	//viewer.viewerRef = ref;
+	return _world.viewers.add(Viewer());
 }
 
 void VoxelEngine::remove_viewer(ViewerID viewer_id) {
