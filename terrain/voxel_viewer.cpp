@@ -3,6 +3,7 @@
 #include "../util/godot/classes/engine.h"
 #include "../util/godot/classes/node.h"
 #include "../util/string_funcs.h"
+#include "../constants/voxel_string_names.h"
 
 namespace zylann::voxel {
 
@@ -71,11 +72,11 @@ void VoxelViewer::_notification(int p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			if (!_reparenting) {
 				if (!Engine::get_singleton()->is_editor_hint()) {
-					_viewer_id = VoxelEngine::get_singleton().add_viewer();
+					_viewer_id = VoxelEngine::get_singleton().add_viewer(this);
 					ZN_PRINT_VERBOSE(format("Created viewer: index: {}",
 							_viewer_id.index)); // version: {}", _viewer_id.index, _viewer_id.version));// + " version:
 												// " + _viewer_id.version));
-
+					//VoxelEngine::get_singleton().set_viewer_world(_viewer_id, )
 					VoxelEngine::get_singleton().set_viewer_distance(_viewer_id, _view_distance);
 					VoxelEngine::get_singleton().set_viewer_requires_visuals(_viewer_id, _requires_visuals);
 					VoxelEngine::get_singleton().set_viewer_requires_collisions(_viewer_id, _requires_collisions);
@@ -115,6 +116,11 @@ void VoxelViewer::_notification(int p_what) {
 	}
 }
 
+void VoxelViewer::on_fully_loaded()
+{
+	emit_signal(VoxelStringNames::get_singleton().viewer_fully_loaded);
+}
+
 void VoxelViewer::set_reparenting(bool reparenting)
 {
 	_reparenting = reparenting;
@@ -149,6 +155,9 @@ void VoxelViewer::_bind_methods() {
 			PropertyInfo(Variant::BOOL, "requires_collisions"), "set_requires_collisions", "is_requiring_collisions");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "requires_data_block_notifications"),
 			"set_requires_data_block_notifications", "is_requiring_data_block_notifications");
+
+	ADD_SIGNAL(MethodInfo("viewer_fully_loaded"));
+
 }
 
 } // namespace zylann::voxel

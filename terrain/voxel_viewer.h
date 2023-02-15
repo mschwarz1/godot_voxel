@@ -32,6 +32,8 @@ public:
 
 	void set_reparenting(bool reparenting);
 
+	virtual void on_fully_loaded();
+
 protected:
 	void _notification(int p_what);
 

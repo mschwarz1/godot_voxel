@@ -117,7 +117,7 @@ public:
 		bool require_visuals = true;
 		bool requires_data_block_notifications = false;
 		int network_peer_id = -1;
-		//VoxelViewer* viewerRef;
+		VoxelViewer* viewerRef;
 	};
 
 	struct ThreadsConfig {
@@ -142,7 +142,8 @@ public:
 		return _world.shared_priority_dependency;
 	}
 
-	ViewerID add_viewer();
+	ViewerID add_viewer(VoxelViewer* ref);
+	VoxelViewer* get_viewer(ViewerID viewer_id);
 	void remove_viewer(ViewerID viewer_id);
 	void set_viewer_position(ViewerID viewer_id, Vector3 position);
 	void set_viewer_distance(ViewerID viewer_id, unsigned int distance);

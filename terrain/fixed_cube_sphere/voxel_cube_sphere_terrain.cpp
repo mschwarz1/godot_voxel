@@ -13,12 +13,12 @@
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../storage/voxel_data.h"
 #include "../../util/container_funcs.h"
-#include "../../util/godot/core/array.h"
 #include "../../util/godot/classes/concave_polygon_shape_3d.h"
 #include "../../util/godot/classes/engine.h"
 #include "../../util/godot/classes/scene_tree.h"
 #include "../../util/godot/classes/script.h"
 #include "../../util/godot/classes/shader_material.h"
+#include "../../util/godot/core/array.h"
 #include "../../util/godot/core/string.h"
 #include "../../util/macros.h"
 #include "../../util/math/conv.h"
@@ -931,7 +931,6 @@ void VoxelCubeSphereTerrain::emit_data_block_loaded(Vector3i bpos) {
 	emit_signal(VoxelStringNames::get_singleton().block_loaded, bpos);
 }
 
-
 void VoxelCubeSphereTerrain::emit_data_block_loading(Vector3i bpos) {
 	// Not sure about exposing buffers directly... some stuff on them is useful to obtain directly,
 	// but also it allows scripters to mess with voxels in a way they should not.
@@ -983,8 +982,7 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 #endif
 }
 
-Vector3 VoxelCubeSphereTerrain::convert_block_pos_to_local_position(Vector3 block_position)
-{
+Vector3 VoxelCubeSphereTerrain::convert_block_pos_to_local_position(Vector3 block_position) {
 	Vector3 offsetPosition = Vector3();
 	Vector3 voxelPos = block_position * get_mesh_block_size();
 	Vector3d posOffset = CalculatePositionOffset(voxelPos);
@@ -992,7 +990,7 @@ Vector3 VoxelCubeSphereTerrain::convert_block_pos_to_local_position(Vector3 bloc
 	offsetPosition.x = posOffset.x + voxelPos.x;
 	offsetPosition.y = posOffset.y + voxelPos.y;
 	offsetPosition.z = posOffset.z + voxelPos.z;
-	
+
 	return offsetPosition;
 }
 
@@ -1294,7 +1292,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 		ZN_PROFILE_SCOPE();
 
 		for (size_t i = 0; i < _paired_viewers.size(); ++i) {
-			const PairedViewer &viewer = _paired_viewers[i];
+			PairedViewer &viewer = _paired_viewers[i];
 
 			{
 				const Box3i &new_data_box = viewer.state.data_box;
@@ -1311,7 +1309,6 @@ void VoxelCubeSphereTerrain::process_viewers() {
 
 				if (prev_mesh_box != new_mesh_box) {
 					ZN_PROFILE_SCOPE();
-
 					// Unview blocks that just fell out of range
 					prev_mesh_box.difference(new_mesh_box, [this, &viewer](Box3i out_of_range_box) {
 						out_of_range_box.for_each_cell([this, &viewer](Vector3i bpos) {
@@ -1325,6 +1322,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 						box_to_load.for_each_cell([this, &viewer](Vector3i bpos) {
 							// Load or update block
 							view_mesh_block(bpos, viewer.state.requires_meshes, viewer.state.requires_collisions);
+							viewer.state.requires_signal = true;
 						});
 					});
 				}
@@ -1335,8 +1333,9 @@ void VoxelCubeSphereTerrain::process_viewers() {
 				if (viewer.state.requires_collisions != viewer.prev_state.requires_collisions) {
 					const Box3i box = new_mesh_box.clipped(prev_mesh_box);
 					if (viewer.state.requires_collisions) {
-						box.for_each_cell([this](Vector3i bpos) { //
+						box.for_each_cell([this, &viewer](Vector3i bpos) { //
 							view_mesh_block(bpos, false, true);
+							viewer.state.requires_signal = true;
 						});
 
 					} else {
@@ -1349,14 +1348,40 @@ void VoxelCubeSphereTerrain::process_viewers() {
 				if (viewer.state.requires_meshes != viewer.prev_state.requires_meshes) {
 					const Box3i box = new_mesh_box.clipped(prev_mesh_box);
 					if (viewer.state.requires_meshes) {
-						box.for_each_cell([this](Vector3i bpos) { //
+						box.for_each_cell([this, &viewer](Vector3i bpos) { //
 							view_mesh_block(bpos, true, false);
+							viewer.state.requires_signal = true;
 						});
 
 					} else {
 						box.for_each_cell([this](Vector3i bpos) { //
 							unview_mesh_block(bpos, true, false);
 						});
+					}
+				}
+				if (viewer.state.requires_signal) {
+					bool loaded = true;
+					viewer.state.mesh_box.for_each_cell([this, &loaded](Vector3i bpos) {
+						// Load or update block
+						VoxelMeshBlockVT *block = _mesh_map.get_block(bpos);
+						if (block != nullptr) {
+							if (block->get_mesh_state() == VoxelMeshBlockVT::MESH_NEVER_UPDATED) {
+								loaded = false;
+							}
+						} 
+						/*
+						else {
+							loaded = false;
+						}
+						*/
+					});
+					if (loaded) {
+						VoxelViewer *ref = VoxelEngine::get_singleton().get_viewer(viewer.id);
+
+						if (ref != nullptr) {
+							ref->on_fully_loaded();
+							viewer.state.requires_signal = false;
+						}
 					}
 				}
 			}
@@ -1997,8 +2022,10 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_mesh_block_size"), &VoxelCubeSphereTerrain::get_mesh_block_size);
 	ClassDB::bind_method(D_METHOD("set_mesh_block_size", "size"), &VoxelCubeSphereTerrain::set_mesh_block_size);
 
-	ClassDB::bind_method(D_METHOD("convert_position_to_vox_position", "local_position"), &VoxelCubeSphereTerrain::convert_position_to_vox_position);
-	ClassDB::bind_method(D_METHOD("convert_block_pos_to_local_position", "local_position"), &VoxelCubeSphereTerrain::convert_block_pos_to_local_position);
+	ClassDB::bind_method(D_METHOD("convert_position_to_vox_position", "local_position"),
+			&VoxelCubeSphereTerrain::convert_position_to_vox_position);
+	ClassDB::bind_method(D_METHOD("convert_block_pos_to_local_position", "local_position"),
+			&VoxelCubeSphereTerrain::convert_block_pos_to_local_position);
 
 	ClassDB::bind_method(D_METHOD("get_statistics"), &VoxelCubeSphereTerrain::_b_get_statistics);
 	ClassDB::bind_method(D_METHOD("get_voxel_tool"), &VoxelCubeSphereTerrain::get_voxel_tool);

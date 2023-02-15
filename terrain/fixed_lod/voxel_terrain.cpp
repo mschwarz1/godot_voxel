@@ -29,6 +29,7 @@
 #include "../instancing/voxel_instancer.h"
 #include "../voxel_data_block_enter_info.h"
 #include "../voxel_save_completion_tracker.h"
+#include "../voxel_viewer.h"
 #ifdef TOOLS_ENABLED
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
 #endif
@@ -447,7 +448,6 @@ void VoxelTerrain::unview_mesh_block(Vector3i bpos, bool mesh_flag, bool collisi
 	// Mesh blocks are created on first view call,
 	// so that would mean we unview one without viewing it in the first place
 	ERR_FAIL_COND(block == nullptr);
-
 
 	if (mesh_flag) {
 		block->mesh_viewers.remove();
@@ -997,6 +997,13 @@ void VoxelTerrain::process_viewers() {
 				size_t paired_viewer_index;
 				if (!self.try_get_paired_viewer_index(viewer_id, paired_viewer_index)) {
 					// New viewer
+					if (viewer.viewerRef != nullptr) {
+						if (viewer.viewerRef->get_world_3d() != self.get_world_3d()) {
+							// Do nothing if the worlds don't match
+							return;
+						}
+					}
+
 					PairedViewer p;
 					p.id = viewer_id;
 					paired_viewer_index = self._paired_viewers.size();
@@ -1104,7 +1111,8 @@ void VoxelTerrain::process_viewers() {
 							view_mesh_block(bpos, viewer.state.requires_meshes, viewer.state.requires_collisions);
 						});
 					});
-				}
+				} 
+				
 
 				// Blocks that remained within range of the viewer may need some changes too if viewer flags were
 				// modified. This operates on a DISTINCT set of blocks than the one above.

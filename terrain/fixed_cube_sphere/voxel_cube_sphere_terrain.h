@@ -248,6 +248,7 @@ private:
 			int view_distance_voxels = 0;
 			bool requires_collisions = false;
 			bool requires_meshes = false;
+			bool requires_signal = false;
 		};
 		ViewerID id;
 		State state;

@@ -45,6 +45,8 @@ public:
 	StringName u_voxel_virtual_texture_tile_size;
 	StringName u_voxel_virtual_texture_offset_scale;
 
+	StringName viewer_fully_loaded;
+
 #ifdef DEBUG_ENABLED
 	StringName _voxel_debug_vt_position;
 #endif

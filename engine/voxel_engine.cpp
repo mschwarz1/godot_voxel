@@ -182,11 +182,22 @@ bool VoxelEngine::is_volume_valid(VolumeID volume_id) const {
 	return _world.volumes.exists(volume_id);
 }
 
-ViewerID VoxelEngine::add_viewer() {
-	//Viewer viewer = Viewer();
-	//viewer.viewerRef = ref;
-	return _world.viewers.add(Viewer());
+ViewerID VoxelEngine::add_viewer(VoxelViewer* ref) {
+	Viewer viewer = Viewer();
+	viewer.viewerRef = ref;
+	return _world.viewers.add(viewer);
 }
+
+VoxelViewer* VoxelEngine::get_viewer(ViewerID viewer_id)
+{
+	if (viewer_exists(viewer_id))
+	{
+		Viewer &viewer = _world.viewers.get(viewer_id);
+		return viewer.viewerRef;
+	}
+	return nullptr;
+}
+
 
 void VoxelEngine::remove_viewer(ViewerID viewer_id) {
 	_world.viewers.remove(viewer_id);
