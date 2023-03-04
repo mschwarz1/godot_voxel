@@ -254,7 +254,7 @@ void test_encode_weights_packed_u16() {
 	weights[1] = 5 << 4;
 	weights[2] = 10 << 4;
 	weights[3] = 15 << 4;
-	const uint16_t encoded_weights = encode_weights_to_packed_u16(weights[0], weights[1], weights[2], weights[3]);
+	const uint16_t encoded_weights = encode_weights_to_packed_u16_lossy(weights[0], weights[1], weights[2], weights[3]);
 	FixedArray<uint8_t, 4> decoded_weights = decode_weights_from_packed_u16(encoded_weights);
 	ZN_TEST_ASSERT(weights == decoded_weights);
 }
@@ -1915,6 +1915,7 @@ void run_voxel_tests() {
 #endif
 #endif
 	VOXEL_TEST(test_voxel_graph_issue471);
+	VOXEL_TEST(test_voxel_graph_unused_single_texture_output);
 	VOXEL_TEST(test_island_finder);
 	VOXEL_TEST(test_unordered_remove_if);
 	VOXEL_TEST(test_instance_data_serialization);
