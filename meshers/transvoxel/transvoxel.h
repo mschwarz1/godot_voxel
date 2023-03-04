@@ -28,7 +28,11 @@ enum TexturingMode {
 	// Blends the 4 most-represented textures in the given block, ignoring the others.
 	// Texture indices and blend factors have 4-bit precision (maximum 16 textures and 16 transition gradients),
 	// and are respectively encoded in UV.x and UV.y.
-	TEXTURES_BLEND_4_OVER_16
+	TEXTURES_BLEND_4_OVER_16,
+
+	// Sends the voxel type over the UV.x 
+	TEXTURES_TYPE_PASSTHROUGH
+
 };
 
 struct LodAttrib {

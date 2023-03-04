@@ -67,6 +67,10 @@ int VoxelMesherTransvoxel::get_used_channels_mask() const {
 		return (1 << VoxelBufferInternal::CHANNEL_SDF) | (1 << VoxelBufferInternal::CHANNEL_INDICES) |
 				(1 << VoxelBufferInternal::CHANNEL_WEIGHTS);
 	}
+	else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH)
+	{
+		return (1 << VoxelBufferInternal::CHANNEL_SDF) | (1 << VoxelBufferInternal::CHANNEL_TYPE);
+	}
 	return (1 << VoxelBufferInternal::CHANNEL_SDF);
 }
 
@@ -424,7 +428,7 @@ void VoxelMesherTransvoxel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_transitions_enabled"), &VoxelMesherTransvoxel::get_transitions_enabled);
 
 	ADD_PROPERTY(
-			PropertyInfo(Variant::INT, "texturing_mode", PROPERTY_HINT_ENUM, "None,4-blend over 16 textures (4 bits)"),
+			PropertyInfo(Variant::INT, "texturing_mode", PROPERTY_HINT_ENUM, "None,4-blend over 16 textures (4 bits), Type Passthrough"),
 			"set_texturing_mode", "get_texturing_mode");
 
 	ADD_GROUP("Mesh optimization", "mesh_optimization_");
@@ -446,6 +450,7 @@ void VoxelMesherTransvoxel::_bind_methods() {
 	BIND_ENUM_CONSTANT(TEXTURES_NONE);
 	// TODO Rename MIXEL
 	BIND_ENUM_CONSTANT(TEXTURES_BLEND_4_OVER_16);
+	BIND_ENUM_CONSTANT(TEXTURES_TYPE_PASSTHROUGH);
 }
 
 } // namespace zylann::voxel

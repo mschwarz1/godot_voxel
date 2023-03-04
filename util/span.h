@@ -4,6 +4,7 @@
 #include "fixed_array.h"
 #include <cstddef>
 #include <vector>
+#include "string_funcs.h"
 
 namespace zylann {
 
@@ -64,6 +65,10 @@ public:
 	}
 
 	inline T &operator[](size_t i) {
+		if (i > _size)
+		{
+			ZN_PRINT_VERBOSE(format("Size {} - i of {} invalid", _size, i));
+		}
 #ifdef DEBUG_ENABLED
 		ZN_ASSERT(i < _size);
 #endif
