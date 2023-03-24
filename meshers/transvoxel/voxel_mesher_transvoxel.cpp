@@ -217,6 +217,11 @@ struct DeepSampler : transvoxel::IDeepSDFSampler {
 	}
 };
 
+Vector3d CalculateVertOffset(Vector3i origin) 
+{
+	return Vector3d((double)origin.x, (double)origin.y, (double)origin.z);
+}
+
 void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher::Input &input) {
 	ZN_PROFILE_SCOPE();
 
@@ -238,6 +243,7 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		// There won't be anything to polygonize since the SDF has no variations, so it can't cross the isolevel
 		return;
 	}
+	Vector3d offset = Vector3d(0,0,0);//CalculateVertOffset(input.origin_in_voxels);
 
 	// const uint64_t time_before = Time::get_singleton()->get_ticks_usec();
 
@@ -255,10 +261,10 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		// `generate_single` in between, knowing they will all be done within the specified area.
 
 		default_texture_indices_data = transvoxel::build_regular_mesh(voxels, sdf_channel, input.lod_index,
-				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, &ds, cell_infos);
+				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, &ds, cell_infos, offset);
 	} else {
 		default_texture_indices_data = transvoxel::build_regular_mesh(voxels, sdf_channel, input.lod_index,
-				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, nullptr, cell_infos);
+				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, nullptr, cell_infos, offset);
 	}
 
 	if (mesh_arrays.vertices.size() == 0) {
@@ -290,12 +296,14 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 
 			transvoxel::build_transition_mesh(voxels, sdf_channel, dir, input.lod_index,
 					static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, *combined_mesh_arrays,
-					default_texture_indices_data);
+					default_texture_indices_data, offset);
 		}
 	}
 
 	Array gd_arrays;
 	fill_surface_arrays(gd_arrays, *combined_mesh_arrays);
+	output.offset = offset;
+
 	output.surfaces.push_back({ gd_arrays, 0 });
 
 	// const uint64_t time_spent = Time::get_singleton()->get_ticks_usec() - time_before;
@@ -327,7 +335,7 @@ Ref<ArrayMesh> VoxelMesherTransvoxel::build_transition_mesh(Ref<gd::VoxelBuffer>
 	default_texture_indices_data.use = false;
 	transvoxel::build_transition_mesh(voxels->get_buffer(), VoxelBufferInternal::CHANNEL_SDF, direction, 0,
 			static_cast<transvoxel::TexturingMode>(_texture_mode), s_cache, s_mesh_arrays,
-			default_texture_indices_data);
+			default_texture_indices_data, Vector3d(0.0,0.0,0.0));
 
 	Ref<ArrayMesh> mesh;
 

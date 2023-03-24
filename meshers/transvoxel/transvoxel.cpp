@@ -412,7 +412,7 @@ template <typename Sdf_T, typename WeightSampler_T>
 void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_data, uint64_t uniform_type_val,
 		TextureIndicesData texture_indices_data, const WeightSampler_T &weights_sampler,
 		const Vector3i block_size_with_padding, uint32_t lod_index, TexturingMode texturing_mode, Cache &cache,
-		MeshArrays &output, const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_info) {
+		MeshArrays &output, const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_info, Vector3d offset) {
 	ZN_PROFILE_SCOPE();
 
 	// This function has some comments as quotes from the Transvoxel paper.
@@ -921,7 +921,7 @@ template <typename Sdf_T, typename WeightSampler_T>
 void build_transition_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_data, uint64_t uniform_type_val,
 		TextureIndicesData texture_indices_data, const WeightSampler_T &weights_sampler,
 		const Vector3i block_size_with_padding, int direction, int lod_index, TexturingMode texturing_mode,
-		Cache &cache, MeshArrays &output) {
+		Cache &cache, MeshArrays &output, Vector3d offset) {
 	// From this point, we expect the buffer to contain allocated data.
 	// This function has some comments as quotes from the Transvoxel paper.
 
@@ -1467,7 +1467,7 @@ Span<const Sdf_T> apply_zero_sdf_fix(Span<const Sdf_T> p_sdf_data) {
 
 DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos) {
+		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset) {
 	ZN_PROFILE_SCOPE();
 	// From this point, we expect the buffer to contain allocated data in the relevant channels.
 
@@ -1523,13 +1523,13 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 		case VoxelBufferInternal::DEPTH_8_BIT: {
 			Span<const int8_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int8_t>();
 			build_regular_mesh<int8_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_16_BIT: {
 			Span<const int16_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int16_t>();
 			build_regular_mesh<int16_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
 		} break;
 
 		// TODO Remove support for 32-bit SDF in Transvoxel?
@@ -1538,7 +1538,7 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 		case VoxelBufferInternal::DEPTH_32_BIT: {
 			Span<const float> sdf_data = sdf_data_raw.reinterpret_cast_to<const float>();
 			build_regular_mesh<float>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_64_BIT:
@@ -1556,7 +1556,7 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 
 void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel, int direction,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		DefaultTextureIndicesData default_texture_indices_data) {
+		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset) {
 	ZN_PROFILE_SCOPE();
 	// From this point, we expect the buffer to contain allocated data in the relevant channels.
 
@@ -1621,19 +1621,19 @@ void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_c
 		case VoxelBufferInternal::DEPTH_8_BIT: {
 			Span<const int8_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int8_t>();
 			build_transition_mesh<int8_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_16_BIT: {
 			Span<const int16_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int16_t>();
 			build_transition_mesh<int16_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_32_BIT: {
 			Span<const float> sdf_data = sdf_data_raw.reinterpret_cast_to<const float>();
 			build_transition_mesh<float>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_64_BIT:

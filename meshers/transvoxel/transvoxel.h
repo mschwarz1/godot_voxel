@@ -6,6 +6,7 @@
 #include "../../util/math/color.h"
 #include "../../util/math/vector2f.h"
 #include "../../util/math/vector3f.h"
+#include "../../util/math/vector3d.h"
 #include "../../util/math/vector3i.h"
 
 #include <vector>
@@ -164,11 +165,11 @@ struct CellInfo {
 
 DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos);
+		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset);
 
 void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel, int direction,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		DefaultTextureIndicesData default_texture_indices_data);
+		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset);
 
 } // namespace zylann::voxel::transvoxel
 
