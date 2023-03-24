@@ -8,7 +8,19 @@ At the moment, this module doesn't have a distinct release schedule, so this cha
 Semver is not yet in place, so each version can have breaking changes, although it shouldn't happen often across minor versions.
 
 
-1.x - Ongoing development - `master`
+1.x - ongoing development - `master`
+--------------------------------------
+
+- General
+    - `VoxelGeneratorGraph`:
+        - Added `Spots2D` and `Spots3D` nodes, optimized for generating "ore patches"
+
+- Fixes
+    - Fixed editor not shrinking properly on narrow screens with a terrain selected. Stats appearing in bottom panel will use a scrollbar if the area is too small.
+    - `VoxelLodTerrain`: fixed error spam when re-generating or destroying the terrain
+
+
+1.0 - 12/03/2023 - `godot4.0`
 ------------------------------
 
 Godot 4 is required from this version.
