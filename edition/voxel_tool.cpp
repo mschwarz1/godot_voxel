@@ -266,10 +266,48 @@ void VoxelTool::copy(Vector3i pos, Ref<gd::VoxelBuffer> dst, uint8_t channel_mas
 	ERR_PRINT("Not implemented");
 }
 
-void VoxelTool::paste(
-		Vector3i p_pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask, bool use_mask, uint64_t mask_value) {
+void VoxelTool::paste(Vector3i p_pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask) {
 	ERR_FAIL_COND(p_voxels.is_null());
 	ERR_PRINT("Not implemented");
+}
+
+void VoxelTool::paste_masked(Vector3i p_pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask, uint8_t mask_channel,
+		uint64_t mask_value) {
+	ERR_FAIL_COND(p_voxels.is_null());
+	ERR_PRINT("Not implemented");
+}
+
+void VoxelTool::smooth_sphere(Vector3 sphere_center, float sphere_radius, int blur_radius) {
+	ZN_PROFILE_SCOPE();
+	ZN_ASSERT_RETURN(blur_radius >= 1 && blur_radius <= 64);
+	ZN_ASSERT_RETURN(sphere_radius >= 0.01f);
+
+	const Box3i voxel_box = Box3i::from_min_max(
+			math::floor_to_int(sphere_center - Vector3(sphere_radius, sphere_radius, sphere_radius)),
+			math::ceil_to_int(sphere_center + Vector3(sphere_radius, sphere_radius, sphere_radius)));
+
+	const Box3i padded_voxel_box = voxel_box.padded(blur_radius);
+
+	// TODO Perhaps should implement `copy` and `paste` with `VoxelBufferInternal` so Godot object wrappers wouldn't be
+	// necessary
+	Ref<gd::VoxelBuffer> buffer;
+	buffer.instantiate();
+	buffer->create(padded_voxel_box.size.x, padded_voxel_box.size.y, padded_voxel_box.size.z);
+
+	if (_channel == VoxelBufferInternal::CHANNEL_SDF) {
+		// Note, this only applies to SDF. It won't blur voxel texture data.
+
+		copy(padded_voxel_box.pos, buffer, (1 << VoxelBufferInternal::CHANNEL_SDF));
+
+		std::shared_ptr<VoxelBufferInternal> smooth_buffer = make_shared_instance<VoxelBufferInternal>();
+		const Vector3f relative_sphere_center = to_vec3f(sphere_center - to_vec3(voxel_box.pos));
+		ops::box_blur(buffer->get_buffer(), *smooth_buffer, blur_radius, relative_sphere_center, sphere_radius);
+
+		paste(voxel_box.pos, gd::VoxelBuffer::create_shared(smooth_buffer), (1 << VoxelBufferInternal::CHANNEL_SDF));
+
+	} else {
+		ERR_PRINT("Not implemented");
+	}
 }
 
 bool VoxelTool::is_area_editable(const Box3i &box) const {
@@ -326,9 +364,13 @@ void VoxelTool::_b_copy(Vector3i pos, Ref<gd::VoxelBuffer> voxels, int channel_m
 	copy(pos, voxels, channel_mask);
 }
 
-void VoxelTool::_b_paste(Vector3i pos, Ref<gd::VoxelBuffer> voxels, int channels_mask, int64_t mask_value) {
-	// TODO May need two functions, one masked, one not masked, or add a parameter, but it breaks compat
-	paste(pos, voxels, channels_mask, mask_value > 0xffffffff, mask_value);
+void VoxelTool::_b_paste(Vector3i pos, Ref<gd::VoxelBuffer> voxels, int channels_mask) {
+	paste(pos, voxels, channels_mask);
+}
+
+void VoxelTool::_b_paste_masked(
+		Vector3i pos, Ref<gd::VoxelBuffer> voxels, int channels_mask, int mask_channel, int64_t mask_value) {
+	paste_masked(pos, voxels, channels_mask, mask_channel, mask_value);
 }
 
 Variant VoxelTool::_b_get_voxel_metadata(Vector3i pos) const {
@@ -418,12 +460,17 @@ void VoxelTool::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("do_sphere", "center", "radius"), &VoxelTool::_b_do_sphere);
 	ClassDB::bind_method(D_METHOD("do_box", "begin", "end"), &VoxelTool::_b_do_box);
 
+	ClassDB::bind_method(
+			D_METHOD("smooth_sphere", "sphere_center", "sphere_radius", "blur_radius"), &VoxelTool::smooth_sphere);
+
 	ClassDB::bind_method(D_METHOD("set_voxel_metadata", "pos", "meta"), &VoxelTool::_b_set_voxel_metadata);
 	ClassDB::bind_method(D_METHOD("get_voxel_metadata", "pos"), &VoxelTool::_b_get_voxel_metadata);
 
 	ClassDB::bind_method(D_METHOD("copy", "src_pos", "dst_buffer", "channels_mask"), &VoxelTool::_b_copy);
+	ClassDB::bind_method(D_METHOD("paste", "dst_pos", "src_buffer", "channels_mask"), &VoxelTool::_b_paste);
 	ClassDB::bind_method(
-			D_METHOD("paste", "dst_pos", "src_buffer", "channels_mask", "src_mask_value"), &VoxelTool::_b_paste);
+			D_METHOD("paste_masked", "dst_pos", "src_buffer", "channels_mask", "mask_channel", "mask_value"),
+			&VoxelTool::_b_paste_masked);
 
 	ClassDB::bind_method(D_METHOD("raycast", "origin", "direction", "max_distance", "collision_mask"),
 			&VoxelTool::_b_raycast, DEFVAL(10.0), DEFVAL(0xffffffff));

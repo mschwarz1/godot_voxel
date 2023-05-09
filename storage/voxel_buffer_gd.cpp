@@ -113,6 +113,49 @@ VoxelBuffer::Depth VoxelBuffer::get_channel_depth(unsigned int channel_index) co
 	return VoxelBuffer::Depth(_buffer->get_channel_depth(channel_index));
 }
 
+void VoxelBuffer::remap_values(unsigned int channel_index, PackedInt32Array map) {
+	ZN_ASSERT_RETURN(channel_index < MAX_CHANNELS);
+
+	Span<const int> map_r(map.ptr(), map.size());
+	const VoxelBufferInternal::Depth depth = _buffer->get_channel_depth(channel_index);
+
+	// TODO If `get_channel_data` could return a span of size 1 for this case, we wouldn't need this code
+	if (_buffer->get_channel_compression(channel_index) == VoxelBufferInternal::COMPRESSION_UNIFORM) {
+		uint64_t v = _buffer->get_voxel(Vector3i(), channel_index);
+		if (v < map_r.size()) {
+			v = map_r[v];
+		}
+		_buffer->fill(v, channel_index);
+		return;
+	}
+
+	switch (depth) {
+		case VoxelBufferInternal::DEPTH_8_BIT: {
+			Span<uint8_t> values;
+			ZN_ASSERT_RETURN(_buffer->get_channel_raw(channel_index, values));
+			for (uint8_t &v : values) {
+				if (v < map_r.size()) {
+					v = map_r[v];
+				}
+			}
+		} break;
+
+		case VoxelBufferInternal::DEPTH_16_BIT: {
+			Span<uint16_t> values;
+			ZN_ASSERT_RETURN(_buffer->get_channel_data(channel_index, values));
+			for (uint16_t &v : values) {
+				if (v < map_r.size()) {
+					v = map_r[v];
+				}
+			}
+		} break;
+
+		default:
+			ZN_PRINT_ERROR("Remapping channel values is not implemented for depths greater than 16 bits.");
+			break;
+	}
+}
+
 Variant VoxelBuffer::get_block_metadata() const {
 	return get_as_variant(_buffer->get_block_metadata());
 }
@@ -233,8 +276,7 @@ Ref<Image> VoxelBuffer::debug_print_sdf_to_image_top_down(const VoxelBufferInter
 	return im;
 }
 
-Ref<Image> VoxelBuffer::debug_print_sdf_y_slice(float scale, int y) const {
-	const VoxelBufferInternal &buffer = *_buffer;
+Ref<Image> VoxelBuffer::debug_print_sdf_y_slice(const VoxelBufferInternal &buffer, float scale, int y) {
 	const Vector3i res = buffer.get_size();
 	ERR_FAIL_COND_V(y < 0 || y >= res.y, Ref<Image>());
 
@@ -259,6 +301,35 @@ Ref<Image> VoxelBuffer::debug_print_sdf_y_slice(float scale, int y) const {
 	return im;
 }
 
+Ref<Image> VoxelBuffer::debug_print_sdf_z_slice(const VoxelBufferInternal &buffer, float scale, int z) {
+	const Vector3i res = buffer.get_size();
+	ERR_FAIL_COND_V(z < 0 || z >= res.z, Ref<Image>());
+
+	Ref<Image> im = create_empty_image(res.x, res.y, false, Image::FORMAT_RGB8);
+
+	const Color nega_col(0.5f, 0.5f, 1.0f);
+	const Color posi_col(1.0f, 0.6f, 0.1f);
+	const Color black(0.f, 0.f, 0.f);
+
+	for (int x = 0; x < res.x; ++x) {
+		for (int y = 0; y < res.y; ++y) {
+			const float sd = scale * buffer.get_voxel_f(x, y, z, VoxelBufferInternal::CHANNEL_SDF);
+
+			const float nega = math::clamp(-sd, 0.0f, 1.0f);
+			const float posi = math::clamp(sd, 0.0f, 1.0f);
+			const Color col = math::lerp(black, nega_col, nega) + math::lerp(black, posi_col, posi);
+
+			im->set_pixel(x, y, col);
+		}
+	}
+
+	return im;
+}
+
+Ref<Image> VoxelBuffer::debug_print_sdf_y_slice(float scale, int y) const {
+	return debug_print_sdf_y_slice(*_buffer, scale, y);
+}
+
 Array VoxelBuffer::debug_print_sdf_y_slices(float scale) const {
 	Array images;
 
@@ -266,7 +337,7 @@ Array VoxelBuffer::debug_print_sdf_y_slices(float scale) const {
 	const Vector3i res = buffer.get_size();
 
 	for (int y = 0; y < res.y; ++y) {
-		images.append(debug_print_sdf_y_slice(scale, y));
+		images.append(debug_print_sdf_y_slice(buffer, scale, y));
 	}
 
 	return images;
@@ -306,6 +377,7 @@ void VoxelBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("optimize"), &VoxelBuffer::_b_deprecated_optimize);
 	ClassDB::bind_method(D_METHOD("compress_uniform_channels"), &VoxelBuffer::compress_uniform_channels);
 	ClassDB::bind_method(D_METHOD("get_channel_compression", "channel"), &VoxelBuffer::get_channel_compression);
+	ClassDB::bind_method(D_METHOD("remap_values", "channel"), &VoxelBuffer::remap_values);
 
 	ClassDB::bind_method(D_METHOD("get_block_metadata"), &VoxelBuffer::get_block_metadata);
 	ClassDB::bind_method(D_METHOD("set_block_metadata", "meta"), &VoxelBuffer::set_block_metadata);

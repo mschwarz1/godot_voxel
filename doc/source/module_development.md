@@ -98,7 +98,7 @@ There is one pool of threads. This pool can be given many tasks and distributes 
 
 Some tasks are scheduled in a "serial" group, which means only one of them will run at a time (although any thread can run them). This is to avoid clogging up all the threads with waiting tasks if they all lock a shared resource. This is used for I/O such as loading and saving to disk.
 
-Threads are managed in [VoxelServer](api/VoxelServer.md).
+Threads are managed in [VoxelEngine](api/VoxelEngine.md).
 
 Note: this task system does not account for "frames". Tasks can run at any time for less or more than one frame of the main thread.
 
@@ -137,7 +137,7 @@ For the most part, use `clang-format` and follow Godot conventions.
 - Constructors and destructors go on top
 - Public API goes on top, private stuff goes below
 - Bindings go at the bottom.
-- Avoid long lines. Preferred ruler is 120 characters. Don't fit too many operations on the same line, use locals.
+- Avoid long lines. Preferred maximum line length is 120 characters. Don't fit too many operations on the same line, use locals.
 - Defining types or functions in `.cpp` may be better for compilation times than in header if they are internal.
 
 ### C++ features
@@ -300,6 +300,8 @@ It was tested with Tracy 0.7.8.
 
 ![Tracy screenshot](images/tracy.webp)
 
+Alternative profilers are also mentionned in the [Godot docs](https://docs.godotengine.org/en/latest/contributing/development/debugging/using_cpp_profilers.html). They profile everything and appear to be based on CPU sampling, while Tracy is an instrumenting profiler providing specific, live results on a timeline.
+
 ### How to use profiler scopes
 
 A profiling scope bounds a section of code. It takes the time before, the time after, and records it into a timeline. In C++ we can use RAII to automatically close a section when we exit a function or block, so usually a single macro is needed at the beginning of the profiled zone.
@@ -359,7 +361,7 @@ Those lines might already be there, if so just uncomment them.
 Once you are done profiling, don't forget to remove these lines, otherwise profiling data will accumulate in memory without being retrieved.
 
 !!! note
-    Tracy has a concept of frame mark, which is usually provided by the application, to tell the profiler when each frame begins. Godot does not provide profiling macros natively, so the frame mark was hacked into `VoxelServer` process function. This allows to see frames of the main thread in the timeline, but they will be offset from their real beginning.
+    Tracy has a concept of frame mark, which is usually provided by the application, to tell the profiler when each frame begins. Godot does not provide profiling macros natively, so the frame mark was hacked into `VoxelEngine` process function. This allows to see frames of the main thread in the timeline, but they will be offset from their real beginning.
 
 This way of integrating Tracy was based on this [commit by vblanco](https://github.com/vblanco20-1/godot/commit/2c5613abb8c9fdb5c4bfe3b52fdb665a91b43579)
 

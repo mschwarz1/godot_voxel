@@ -7,6 +7,7 @@
 #include "../util/math/sdf.h"
 #include "../util/noise/fast_noise_lite/fast_noise_lite.h"
 #include "../util/string_funcs.h"
+#include "test_util.h"
 #include "testing.h"
 
 #ifdef VOXEL_ENABLE_FAST_NOISE_2
@@ -686,46 +687,6 @@ void print_sdf_as_ascii(const VoxelBufferInternal &vb) {
 	}
 	return false;
 }*/
-
-bool sd_equals_approx(const VoxelBufferInternal &vb1, const VoxelBufferInternal &vb2) {
-	const VoxelBufferInternal::ChannelId channel = VoxelBufferInternal::CHANNEL_SDF;
-	const VoxelBufferInternal::Depth depth = vb1.get_channel_depth(channel);
-	// const float error_margin = 1.1f * VoxelBufferInternal::get_sdf_quantization_scale(depth);
-	// There can be a small difference due to scaling operations, so instead of an exact equality, we check approximate
-	// equality.
-	Vector3i pos;
-	for (pos.y = 0; pos.y < vb1.get_size().y; ++pos.y) {
-		for (pos.z = 0; pos.z < vb1.get_size().z; ++pos.z) {
-			for (pos.x = 0; pos.x < vb1.get_size().x; ++pos.x) {
-				switch (depth) {
-					case VoxelBufferInternal::DEPTH_8_BIT: {
-						const int sd1 = int8_t(vb1.get_voxel(pos, channel));
-						const int sd2 = int8_t(vb2.get_voxel(pos, channel));
-						if (Math::abs(sd1 - sd2) > 1) {
-							return false;
-						}
-					} break;
-					case VoxelBufferInternal::DEPTH_16_BIT: {
-						const int sd1 = int16_t(vb1.get_voxel(pos, channel));
-						const int sd2 = int16_t(vb2.get_voxel(pos, channel));
-						if (Math::abs(sd1 - sd2) > 1) {
-							return false;
-						}
-					} break;
-					case VoxelBufferInternal::DEPTH_32_BIT:
-					case VoxelBufferInternal::DEPTH_64_BIT: {
-						const float sd1 = vb1.get_voxel_f(pos, channel);
-						const float sd2 = vb2.get_voxel_f(pos, channel);
-						if (!Math::is_equal_approx(sd1, sd2)) {
-							return false;
-						}
-					} break;
-				}
-			}
-		}
-	}
-	return true;
-}
 
 void test_voxel_graph_generate_block_with_input_sdf() {
 	static const int BLOCK_SIZE = 16;
@@ -1717,12 +1678,12 @@ void test_voxel_graph_spots2d_optimized_execution_map() {
 	{
 		// There is a spot in the top-right corner of this area
 		generator->generate_block(VoxelGenerator::VoxelQueryData{ voxels1, Vector3i(16, 0, 16), 0 });
-		L::print_indices_and_weights(voxels1, 8);
+		// L::print_indices_and_weights(voxels1, 8);
 		ZN_TEST_ASSERT(L::has_spot(voxels1));
 
 		// There is no spot here
 		generator->generate_block(VoxelGenerator::VoxelQueryData{ voxels2, Vector3i(0, 0, 0), 0 });
-		L::print_indices_and_weights(voxels2, 8);
+		// L::print_indices_and_weights(voxels2, 8);
 		ZN_TEST_ASSERT(L::has_spot(voxels2) == false);
 	}
 
@@ -1735,12 +1696,12 @@ void test_voxel_graph_spots2d_optimized_execution_map() {
 	generator->set_use_optimized_execution_map(true);
 	{
 		generator->generate_block(VoxelGenerator::VoxelQueryData{ voxels3, Vector3i(16, 0, 16), 0 });
-		L::print_indices_and_weights(voxels3, 8);
+		// L::print_indices_and_weights(voxels3, 8);
 		ZN_TEST_ASSERT(L::has_spot(voxels3));
 		ZN_TEST_ASSERT(voxels3.equals(voxels1));
 
 		generator->generate_block(VoxelGenerator::VoxelQueryData{ voxels4, Vector3i(0, 0, 0), 0 });
-		L::print_indices_and_weights(voxels4, 8);
+		// L::print_indices_and_weights(voxels4, 8);
 		ZN_TEST_ASSERT(L::has_spot(voxels4) == false);
 		ZN_TEST_ASSERT(voxels4.equals(voxels2));
 	}
@@ -1774,6 +1735,48 @@ void test_voxel_graph_spots2d_optimized_execution_map() {
 			ZN_TEST_ASSERT(bt.expect_spot == spot_found);
 		}
 	}*/
+}
+
+void test_voxel_graph_unused_inner_output() {
+	// When compiling a graph with an unused output in one if its inner nodes (not an Output* node), compiling in debug
+	// would crash because it tries to allocate an output buffer with 0 users, which should be allowed specifically in
+	// debug. To reproduce this, we need to have a node with more than one output, and one output being being used for a
+	// graph output. So the node will get compiled as part of the program, but will have an unused output. In non-debug
+	// this output will be allocated as a temporary throwaway buffer, but in debug all outputs are allocated regardless
+	// since buffer allocations are not optimized.
+
+	Ref<VoxelGeneratorGraph> generator;
+	generator.instantiate();
+	{
+		Ref<VoxelGraphFunction> g = generator->get_main_function();
+		ZN_ASSERT(g.is_valid());
+
+		//    X             OutSDF
+		//     \           /
+		// Y -- Normalize3D -- (unused `ny`)
+		//     /         \ \
+		//    Z           \ (unused `nz`)
+		//                 \
+		//                  (unused `len`)
+
+		const uint32_t n_x = g->create_node(VoxelGraphFunction::NODE_INPUT_X, Vector2());
+		const uint32_t n_y = g->create_node(VoxelGraphFunction::NODE_INPUT_Y, Vector2());
+		const uint32_t n_z = g->create_node(VoxelGraphFunction::NODE_INPUT_Z, Vector2());
+		const uint32_t n_normalize = g->create_node(VoxelGraphFunction::NODE_NORMALIZE_3D, Vector2());
+		const uint32_t n_out = g->create_node(VoxelGraphFunction::NODE_OUTPUT_SDF, Vector2());
+
+		g->add_connection(n_x, 0, n_normalize, 0);
+		g->add_connection(n_y, 0, n_normalize, 1);
+		g->add_connection(n_z, 0, n_normalize, 2);
+		g->add_connection(n_normalize, 0, n_out, 0);
+		// Leave outputs `ny`, `nz` and `len` unused
+	}
+
+	const CompilationResult result_debug = generator->compile(true);
+	ZN_TEST_ASSERT(result_debug.success);
+
+	const CompilationResult result_ndebug = generator->compile(true);
+	ZN_TEST_ASSERT(result_ndebug.success);
 }
 
 } // namespace zylann::voxel::tests
