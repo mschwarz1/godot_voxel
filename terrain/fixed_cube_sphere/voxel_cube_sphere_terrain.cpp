@@ -1368,7 +1368,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 							if (block->get_mesh_state() == VoxelMeshBlockVT::MESH_NEVER_UPDATED) {
 								loaded = false;
 							}
-						} 
+						}
 						/*
 						else {
 							loaded = false;
@@ -1817,8 +1817,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 		}
 	}
 
-	block->set_mesh(mesh, DirectMeshInstance::GIMode(get_gi_mode()));
-
+	block->set_mesh(mesh, DirectMeshInstance::GIMode(get_gi_mode()), RenderingServer::ShadowCastingSetting(get_shadow_casting()));
 	if (_material_override.is_valid()) {
 		block->set_material_override(_material_override);
 	}
