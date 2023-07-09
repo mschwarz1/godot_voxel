@@ -3,6 +3,7 @@
 
 #include "../../engine/ids.h"
 #include "../../util/godot/classes/editor_plugin.h"
+#include "../../util/godot/macros.h"
 #include "voxel_terrain_editor_inspector_plugin.h"
 
 // When compiling with GodotCpp, it isn't possible to forward-declare these, due to how virtual methods are implemented.
@@ -54,6 +55,7 @@ private:
 		MENU_SHOW_OCTREE_BOUNDS,
 		MENU_SHOW_OCTREE_NODES,
 		MENU_SHOW_MESH_UPDATES,
+		MENU_SHOW_MODIFIER_BOUNDS,
 		MENU_ABOUT
 	};
 
@@ -65,6 +67,7 @@ private:
 	bool _show_octree_nodes = false;
 	bool _show_octree_bounds = false;
 	bool _show_mesh_updates = false;
+	bool _show_modifier_bounds = false;
 
 	MenuButton *_menu_button = nullptr;
 	VoxelAboutWindow *_about_window = nullptr;

@@ -6,10 +6,12 @@
 #include "../../terrain/variable_lod/voxel_lod_terrain.h"
 #include "../../util/godot/classes/camera_3d.h"
 #include "../../util/godot/classes/editor_interface.h"
+#include "../../util/godot/classes/editor_settings.h"
 #include "../../util/godot/classes/menu_button.h"
 #include "../../util/godot/classes/node.h"
 #include "../../util/godot/classes/popup_menu.h"
 #include "../../util/godot/core/callable.h"
+#include "../../util/godot/core/keyboard.h"
 #include "../../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../../util/godot/funcs.h"
 #include "../about_window.h"
@@ -41,7 +43,10 @@ void VoxelTerrainEditorPlugin::generate_menu_items(MenuButton *menu_button, bool
 	PopupMenu *popup = menu_button->get_popup();
 	popup->clear();
 
-	popup->add_item(ZN_TTR("Re-generate"), MENU_RESTART_STREAM);
+	popup->add_shortcut(get_or_create_editor_shortcut("voxel/regenerate_terrain", ZN_TTR("Re-generate"),
+								godot::KEY_MASK_CMD_OR_CTRL | godot::KEY_R),
+			MENU_RESTART_STREAM);
+
 	popup->add_item(ZN_TTR("Re-mesh"), MENU_REMESH);
 	popup->add_separator();
 	{
@@ -69,6 +74,12 @@ void VoxelTerrainEditorPlugin::generate_menu_items(MenuButton *menu_button, bool
 			const int i = popup->get_item_index(MENU_SHOW_MESH_UPDATES);
 			popup->set_item_as_checkable(i, true);
 			popup->set_item_checked(i, _show_mesh_updates);
+		}
+		{
+			popup->add_item(ZN_TTR("Show modifier bounds"), MENU_SHOW_MODIFIER_BOUNDS);
+			const int i = popup->get_item_index(MENU_SHOW_MODIFIER_BOUNDS);
+			popup->set_item_as_checkable(i, true);
+			popup->set_item_checked(i, _show_modifier_bounds);
 		}
 	}
 	popup->add_separator();
@@ -185,6 +196,7 @@ void VoxelTerrainEditorPlugin::set_node(VoxelNode *node) {
 			vlt->debug_set_draw_flag(VoxelLodTerrain::DEBUG_DRAW_OCTREE_NODES, _show_octree_nodes);
 			vlt->debug_set_draw_flag(VoxelLodTerrain::DEBUG_DRAW_OCTREE_BOUNDS, _show_octree_bounds);
 			vlt->debug_set_draw_flag(VoxelLodTerrain::DEBUG_DRAW_MESH_UPDATES, _show_mesh_updates);
+			vlt->debug_set_draw_flag(VoxelLodTerrain::DEBUG_DRAW_MODIFIER_BOUNDS, _show_modifier_bounds);
 		}
 	}
 }
@@ -273,6 +285,16 @@ void VoxelTerrainEditorPlugin::_on_menu_item_selected(int id) {
 
 			const int i = _menu_button->get_popup()->get_item_index(MENU_SHOW_MESH_UPDATES);
 			_menu_button->get_popup()->set_item_checked(i, _show_mesh_updates);
+		} break;
+
+		case MENU_SHOW_MODIFIER_BOUNDS: {
+			VoxelLodTerrain *lod_terrain = Object::cast_to<VoxelLodTerrain>(_node);
+			ERR_FAIL_COND(lod_terrain == nullptr);
+			_show_modifier_bounds = !_show_modifier_bounds;
+			lod_terrain->debug_set_draw_flag(VoxelLodTerrain::DEBUG_DRAW_MODIFIER_BOUNDS, _show_modifier_bounds);
+
+			const int i = _menu_button->get_popup()->get_item_index(MENU_SHOW_MODIFIER_BOUNDS);
+			_menu_button->get_popup()->set_item_checked(i, _show_modifier_bounds);
 		} break;
 
 		case MENU_ABOUT:

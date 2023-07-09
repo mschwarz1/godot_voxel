@@ -150,7 +150,7 @@ VoxelLodTerrain::VoxelLodTerrain() {
 		VoxelLodTerrain *self = reinterpret_cast<VoxelLodTerrain *>(cb_data);
 		self->apply_data_block_response(ob);
 	};
-	callbacks.virtual_texture_output_callback = [](void *cb_data, VoxelEngine::BlockDetailTextureOutput &ob) {
+	callbacks.detail_texture_output_callback = [](void *cb_data, VoxelEngine::BlockDetailTextureOutput &ob) {
 		VoxelLodTerrain *self = reinterpret_cast<VoxelLodTerrain *>(cb_data);
 		self->apply_detail_texture_update(ob);
 	};
@@ -235,8 +235,8 @@ void VoxelLodTerrain::set_stream(Ref<VoxelStream> p_stream) {
 #ifdef TOOLS_ENABLED
 	if (p_stream.is_valid()) {
 		if (Engine::get_singleton()->is_editor_hint()) {
-			Ref<Script> script = p_stream->get_script();
-			if (script.is_valid()) {
+			Ref<Script> stream_script = p_stream->get_script();
+			if (stream_script.is_valid()) {
 				// Safety check. It's too easy to break threads by making a script reload.
 				// You can turn it back on, but be careful.
 				_update_data->settings.run_stream_in_editor = false;
@@ -266,8 +266,8 @@ void VoxelLodTerrain::set_generator(Ref<VoxelGenerator> p_generator) {
 #ifdef TOOLS_ENABLED
 	if (p_generator.is_valid()) {
 		if (Engine::get_singleton()->is_editor_hint()) {
-			Ref<Script> script = p_generator->get_script();
-			if (script.is_valid()) {
+			Ref<Script> generator_script = p_generator->get_script();
+			if (generator_script.is_valid()) {
 				// Safety check. It's too easy to break threads by making a script reload.
 				// You can turn it back on, but be careful.
 				_update_data->settings.run_stream_in_editor = false;
@@ -361,7 +361,7 @@ void VoxelLodTerrain::_on_stream_params_changed() {
 
 	reset_maps();
 	// TODO Size other than 16 is not really supported though.
-	// also this code isn't right, it doesnt update the other lods
+	// also this code isn't right, it doesn't update the other lods
 	//_data->lods[0].map.create(p_block_size_po2, 0);
 
 	Ref<VoxelGenerator> generator = get_generator();
@@ -595,7 +595,7 @@ void VoxelLodTerrain::set_view_distance(int p_distance_in_voxels) {
 void VoxelLodTerrain::start_updater() {
 	Ref<VoxelMesherBlocky> blocky_mesher = _mesher;
 	if (blocky_mesher.is_valid()) {
-		Ref<VoxelBlockyLibrary> library = blocky_mesher->get_library();
+		Ref<VoxelBlockyLibraryBase> library = blocky_mesher->get_library();
 		if (library.is_valid()) {
 			// TODO Any way to execute this function just after the TRES resource loader has finished to load?
 			// VoxelLibrary should be baked ahead of time, like MeshLibrary
@@ -628,18 +628,26 @@ void VoxelLodTerrain::stop_updater() {
 }
 
 void VoxelLodTerrain::start_streamer() {
-	if (is_full_load_mode_enabled() && get_stream().is_valid()) {
-		// TODO May want to defer this to be sure it's not done multiple times.
-		// This would be a side-effect of setting properties one by one, either by scene loader or by script
+	if (is_full_load_mode_enabled()) {
+		if (get_stream().is_valid()) {
+			// TODO May want to defer this to be sure it's not done multiple times.
+			// This would be a side-effect of setting properties one by one, either by scene loader or by script
 
-		ZN_PRINT_VERBOSE(format("Request all blocks for volume {}", _volume_id));
-		ZN_ASSERT(_streaming_dependency != nullptr);
+			ZN_PRINT_VERBOSE(format("Request all blocks for volume {}", _volume_id));
+			ZN_ASSERT(_streaming_dependency != nullptr);
 
-		LoadAllBlocksDataTask *task = memnew(LoadAllBlocksDataTask);
-		task->volume_id = _volume_id;
-		task->stream_dependency = _streaming_dependency;
+			_data->set_full_load_completed(false);
 
-		VoxelEngine::get_singleton().push_async_io_task(task);
+			LoadAllBlocksDataTask *task = memnew(LoadAllBlocksDataTask);
+			task->volume_id = _volume_id;
+			task->stream_dependency = _streaming_dependency;
+			task->data = _data;
+
+			VoxelEngine::get_singleton().push_async_io_task(task);
+
+		} else {
+			_data->set_full_load_completed(true);
+		}
 	}
 }
 
@@ -1043,7 +1051,7 @@ void VoxelLodTerrain::process(float delta) {
 			generator = get_generator();
 		}
 		if (generator.is_valid() && generator->supports_shaders() &&
-				generator->get_virtual_rendering_shader() == nullptr) {
+				generator->get_detail_rendering_shader() == nullptr) {
 			generator->compile_shaders();
 		}
 	}
@@ -1083,7 +1091,8 @@ void VoxelLodTerrain::process(float delta) {
 			VoxelEngine::get_singleton().push_async_task(task);
 
 		} else {
-			task->run(ThreadedTaskContext{ 0 });
+			ThreadedTaskContext ctx{ 0, false };
+			task->run(ctx);
 			memdelete(task);
 			apply_main_thread_update_tasks();
 		}
@@ -1207,7 +1216,7 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 					const Vector3 block_center = volume_transform.xform(
 							to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
 
-					// Dont do fading for blocks behind the camera
+					// Don't do fading for blocks behind the camera.
 					if (camera.forward.dot(block_center - camera.position) > 0.f) {
 						FadingOutMesh item;
 
@@ -1286,7 +1295,7 @@ void VoxelLodTerrain::apply_data_block_response(VoxelEngine::BlockDataOutput &ob
 	if (ob.type == VoxelEngine::BlockDataOutput::TYPE_SAVED) {
 		// That's a save confirmation event.
 		// Note: in the future, if blocks don't get copied before being sent for saving,
-		// we will need to use block versionning to know when we can reset the `modified` flag properly
+		// we will need to use block versioning to know when we can reset the `modified` flag properly
 
 		// TODO Now that's the case. Use version? Or just keep copying?
 		return;
@@ -1604,7 +1613,7 @@ static void try_apply_parent_virtual_texture_to_block(VoxelMeshBlockVLT &block, 
 	const Vector4 parent_offset_and_scale =
 			parent_material->get_shader_parameter(sn.u_voxel_virtual_texture_offset_scale);
 	const Vector3i parent_offset(parent_offset_and_scale.x, parent_offset_and_scale.y, parent_offset_and_scale.z);
-	const int fallback_level = parent_block.virtual_texture_fallback_level + 1;
+	const int fallback_level = parent_block.detail_texture_fallback_level + 1;
 
 	const Vector3i offset = parent_offset + (bpos - (parent_bpos * 2)) * (mesh_block_size >> fallback_level);
 	const float scale = 1.f / float(1 << fallback_level);
@@ -1618,7 +1627,7 @@ static void try_apply_parent_virtual_texture_to_block(VoxelMeshBlockVLT &block, 
 			get_detail_texture_tile_resolution_for_lod(detail_texture_settings, parent_lod_index);
 	material.set_shader_parameter(sn.u_voxel_virtual_texture_tile_size, tile_size);
 
-	block.virtual_texture_fallback_level = fallback_level;
+	block.detail_texture_fallback_level = fallback_level;
 }
 
 void VoxelLodTerrain::try_apply_parent_detail_texture_to_block(VoxelMeshBlockVLT &block, Vector3i bpos) {
@@ -1694,18 +1703,18 @@ void VoxelLodTerrain::apply_detail_texture_update_to_block(
 		RWLockRead rlock(lod.mesh_map_state.map_lock);
 		auto mesh_block_state_it = lod.mesh_map_state.map.find(block.position);
 		if (mesh_block_state_it != lod.mesh_map_state.map.end()) {
-			VoxelLodTerrainUpdateData::VirtualTextureState expected_vt_state =
-					VoxelLodTerrainUpdateData::VIRTUAL_TEXTURE_PENDING;
+			VoxelLodTerrainUpdateData::DetailTextureState expected_dt_state =
+					VoxelLodTerrainUpdateData::DETAIL_TEXTURE_PENDING;
 			// If it was PENDING, set it to IDLE.
-			mesh_block_state_it->second.virtual_texture_state.compare_exchange_strong(
-					expected_vt_state, VoxelLodTerrainUpdateData::VIRTUAL_TEXTURE_IDLE);
+			mesh_block_state_it->second.detail_texture_state.compare_exchange_strong(
+					expected_dt_state, VoxelLodTerrainUpdateData::DETAIL_TEXTURE_IDLE);
 			// TODO If the mesh was modified again since, we need to schedule an extra update for the virtual texture to
 			// catch up. But for now I'm not sure if there is much value in doing so. It can get updated by the next
 			// edit. Scheduling an update from here isn't mildly inconvenient due to threading.
 		}
 	}
 
-	block.virtual_texture_fallback_level = 0;
+	block.detail_texture_fallback_level = 0;
 }
 
 void VoxelLodTerrain::process_deferred_collision_updates(uint32_t timeout_msec) {
@@ -1895,7 +1904,7 @@ void VoxelLodTerrain::set_instancer(VoxelInstancer *instancer) {
 	_instancer = instancer;
 }
 
-// This function is primarily intented for editor use cases at the moment.
+// This function is primarily intended for editor use cases at the moment.
 // It will be slower than using the instancing generation events,
 // because it has to query VisualServer, which then allocates and decodes vertex buffers (assuming they are cached).
 Array VoxelLodTerrain::get_mesh_block_surface(Vector3i block_pos, int lod_index) const {
@@ -2126,20 +2135,20 @@ Ref<VoxelGenerator> VoxelLodTerrain::get_normalmap_generator_override() const {
 void VoxelLodTerrain::set_normalmap_generator_override_begin_lod_index(int lod_index) {
 	ERR_FAIL_COND(lod_index < 0);
 	ERR_FAIL_COND(lod_index > static_cast<int>(constants::MAX_LOD));
-	_update_data->settings.virtual_texture_generator_override_begin_lod_index = lod_index;
+	_update_data->settings.detail_texture_generator_override_begin_lod_index = lod_index;
 }
 
 int VoxelLodTerrain::get_normalmap_generator_override_begin_lod_index() const {
-	return _update_data->settings.virtual_texture_generator_override_begin_lod_index;
+	return _update_data->settings.detail_texture_generator_override_begin_lod_index;
 }
 
 void VoxelLodTerrain::set_normalmap_use_gpu(bool enabled) {
-	_update_data->settings.virtual_textures_use_gpu = enabled;
+	_update_data->settings.detail_textures_use_gpu = enabled;
 	update_configuration_warnings();
 }
 
 bool VoxelLodTerrain::get_normalmap_use_gpu() const {
-	return _update_data->settings.virtual_textures_use_gpu;
+	return _update_data->settings.detail_textures_use_gpu;
 }
 
 #ifdef TOOLS_ENABLED
@@ -2562,7 +2571,7 @@ void VoxelLodTerrain::update_gizmos() {
 			const Vector3i block_offset_lod0 = block_pos_maxlod << (lod_count - 1);
 
 			octree.for_each_leaf([&dr, block_offset_lod0, mesh_block_size, parent_transform, lod_count_f](
-										 Vector3i node_pos, int lod_index, const LodOctree::NodeData &data) {
+										 Vector3i node_pos, int lod_index, const LodOctree::NodeData &node_data) {
 				//
 				const int size = mesh_block_size << lod_index;
 				const Vector3i voxel_pos = mesh_block_size * ((node_pos << lod_index) + block_offset_lod0);
@@ -2635,6 +2644,16 @@ void VoxelLodTerrain::update_gizmos() {
 		}
 	}
 
+	// Modifiers
+	if (debug_get_draw_flag(DEBUG_DRAW_MODIFIER_BOUNDS)) {
+		const VoxelModifierStack &modifiers = _data->get_modifiers();
+		modifiers.for_each_modifier([&dr](const VoxelModifier &modifier) {
+			const AABB aabb = modifier.get_aabb();
+			const Transform3D t(Basis().scaled(aabb.size), aabb.get_center() - aabb.size * 0.5);
+			dr.draw_box_mm(t, Color8(0, 0, 255, 255));
+		});
+	}
+
 	dr.end();
 }
 
@@ -2646,7 +2665,7 @@ Array VoxelLodTerrain::_b_debug_print_sdf_top_down(Vector3i center, Vector3i ext
 
 	Array image_array;
 	const unsigned int lod_count = get_lod_count();
-	const VoxelData &data = *_data;
+	const VoxelData &voxel_data = *_data;
 
 	for (unsigned int lod_index = 0; lod_index < lod_count; ++lod_index) {
 		const Box3i world_box = Box3i::from_center_extents(center >> lod_index, extents >> lod_index);
@@ -2658,11 +2677,11 @@ Array VoxelLodTerrain::_b_debug_print_sdf_top_down(Vector3i center, Vector3i ext
 		VoxelBufferInternal buffer;
 		buffer.create(world_box.size);
 
-		world_box.for_each_cell([world_box, &buffer, &data](const Vector3i &world_pos) {
+		world_box.for_each_cell([world_box, &buffer, &voxel_data](const Vector3i &world_pos) {
 			const Vector3i rpos = world_pos - world_box.pos;
 			VoxelSingleValue v;
 			v.f = 1.f;
-			v = data.get_voxel(world_pos, VoxelBufferInternal::CHANNEL_SDF, v);
+			v = voxel_data.get_voxel(world_pos, VoxelBufferInternal::CHANNEL_SDF, v);
 			buffer.set_voxel_f(v.f, rpos.x, rpos.y, rpos.z, VoxelBufferInternal::CHANNEL_SDF);
 		});
 
@@ -2893,6 +2912,7 @@ void VoxelLodTerrain::_bind_methods() {
 	BIND_ENUM_CONSTANT(DEBUG_DRAW_EDIT_BOXES);
 	BIND_ENUM_CONSTANT(DEBUG_DRAW_VOLUME_BOUNDS);
 	BIND_ENUM_CONSTANT(DEBUG_DRAW_EDITED_BLOCKS);
+	BIND_ENUM_CONSTANT(DEBUG_DRAW_MODIFIER_BOUNDS);
 	BIND_ENUM_CONSTANT(DEBUG_DRAW_FLAGS_COUNT);
 
 	ADD_GROUP("Bounds", "");

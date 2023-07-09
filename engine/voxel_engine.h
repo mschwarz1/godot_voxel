@@ -29,7 +29,7 @@ namespace zylann::voxel {
 class VoxelViewer;
 
 // Singleton for common things, notably the task system and shared viewers list.
-// In Godot terminology this used to be called a "server", but I dont really agree with the term here, and it can be
+// In Godot terminology this used to be called a "server", but I don't really agree with the term here, and it can be
 // confused with networking features.
 class VoxelEngine {
 public:
@@ -92,7 +92,7 @@ public:
 	struct VolumeCallbacks {
 		void (*mesh_output_callback)(void *, BlockMeshOutput &) = nullptr;
 		void (*data_output_callback)(void *, BlockDataOutput &) = nullptr;
-		void (*virtual_texture_output_callback)(void *, BlockDetailTextureOutput &) = nullptr;
+		void (*detail_texture_output_callback)(void *, BlockDetailTextureOutput &) = nullptr;
 		void *data = nullptr;
 
 		inline bool check_callbacks() const {

@@ -24,7 +24,7 @@ public:
 		return "MeshBlock";
 	}
 
-	void run(ThreadedTaskContext ctx) override;
+	void run(ThreadedTaskContext &ctx) override;
 	TaskPriority get_priority() override;
 	bool is_cancelled() override;
 	void apply_result() override;
@@ -41,14 +41,13 @@ public:
 
 	uint8_t lod_index = 0;
 	uint8_t blocks_count = 0;
-	uint8_t data_block_size = 0;
 	bool collision_hint = false;
 	bool lod_hint = false;
-	// Virtual textures might be enabled, but we don't always want to update them in every mesh update.
+	// Detail textures might be enabled, but we don't always want to update them in every mesh update.
 	// So this boolean is also checked to know if they should be computed.
-	bool require_virtual_texture = false;
-	uint8_t virtual_texture_generator_override_begin_lod_index = 0;
-	bool virtual_texture_use_gpu = false;
+	bool require_detail_texture = false;
+	uint8_t detail_texture_generator_override_begin_lod_index = 0;
+	bool detail_texture_use_gpu = false;
 	PriorityDependency priority_dependency;
 	std::shared_ptr<MeshingDependency> meshing_dependency;
 	std::shared_ptr<VoxelData> data;
