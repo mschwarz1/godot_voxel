@@ -40,6 +40,7 @@
 #include "terrain/fixed_lod/voxel_box_mover.h"
 #include "terrain/fixed_lod/voxel_terrain.h"
 #include "terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
+#include "terrain/fixed_cube_sphere/voxel_cs_terrain_multiplayer_synchronizer.h"
 #include "terrain/fixed_lod/voxel_terrain_multiplayer_synchronizer.h"
 #include "terrain/instancing/voxel_instance_component.h"
 #include "terrain/instancing/voxel_instance_library_scene_item.h"
@@ -272,6 +273,7 @@ void initialize_voxel_module(ModuleInitializationLevel p_level) {
 #endif
 		ClassDB::register_class<VoxelMeshSDF>();
 		ClassDB::register_class<VoxelTerrainMultiplayerSynchronizer>();
+		ClassDB::register_class<VoxelCSTerrainMultiplayerSynchronizer>();
 
 		// Meshers
 		register_abstract_class<VoxelMesher>();

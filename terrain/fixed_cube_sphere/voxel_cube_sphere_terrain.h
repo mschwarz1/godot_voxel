@@ -20,6 +20,7 @@ namespace voxel {
 class VoxelTool;
 class VoxelInstancer;
 class VoxelSaveCompletionTracker;
+class VoxelCSTerrainMultiplayerSynchronizer;
 
 // Infinite paged terrain made of voxel blocks all with the same level of detail.
 // Voxels are polygonized around the viewer by distance in a large cubic space.
@@ -150,7 +151,11 @@ public:
 	void set_instancer(VoxelInstancer *instancer);
 	void get_meshed_block_positions(std::vector<Vector3i> &out_positions) const;
 	void get_meshed_block_offsets(std::vector<Vector3d> &out_offsets) const;
-
+	void get_viewers_in_area(std::vector<ViewerID> &out_viewer_ids, Box3i voxel_box) const;
+	
+	void set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer);
+	const VoxelCSTerrainMultiplayerSynchronizer *get_multiplayer_synchronizer() const;
+	
 	Array get_mesh_block_surface(Vector3i block_pos) const;
 
 	VolumeID get_volume_id() const override {
@@ -209,7 +214,6 @@ private:
 
 	void notify_data_block_enter(const VoxelDataBlock &block, Vector3i bpos, ViewerID viewer_id);
 
-	void get_viewers_in_area(std::vector<ViewerID> &out_viewer_ids, Box3i voxel_box) const;
 
 #ifdef ZN_GODOT
 	// Called each time a data block enters a viewer's area.
@@ -310,6 +314,7 @@ private:
 	GodotObjectUniquePtr<VoxelDataBlockEnterInfo> _data_block_enter_info_obj;
 
 	VoxelInstancer *_instancer = nullptr;
+	VoxelCSTerrainMultiplayerSynchronizer *_multiplayer_synchronizer = nullptr;
 
 	Stats _stats;
 	bool _debug;

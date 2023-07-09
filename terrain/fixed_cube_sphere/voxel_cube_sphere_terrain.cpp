@@ -15,6 +15,8 @@
 #include "../../util/container_funcs.h"
 #include "../../util/godot/classes/concave_polygon_shape_3d.h"
 #include "../../util/godot/classes/engine.h"
+#include "../../util/godot/classes/multiplayer_api.h"
+#include "../../util/godot/classes/multiplayer_peer.h"
 #include "../../util/godot/classes/scene_tree.h"
 #include "../../util/godot/classes/script.h"
 #include "../../util/godot/classes/shader_material.h"
@@ -30,6 +32,8 @@
 #include "../voxel_data_block_enter_info.h"
 #include "../voxel_save_completion_tracker.h"
 #include "../voxel_viewer.h"
+#include "voxel_cs_terrain_multiplayer_synchronizer.h"
+
 #ifdef TOOLS_ENABLED
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
 #endif
@@ -323,6 +327,14 @@ void VoxelCubeSphereTerrain::get_viewers_in_area(std::vector<ViewerID> &out_view
 			out_viewer_ids.push_back(viewer.id);
 		}
 	}
+}
+
+void VoxelCubeSphereTerrain::set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer) {
+	_multiplayer_synchronizer = synchronizer;
+}
+
+const VoxelCSTerrainMultiplayerSynchronizer *VoxelCubeSphereTerrain::get_multiplayer_synchronizer() const {
+	return _multiplayer_synchronizer;
 }
 
 void VoxelCubeSphereTerrain::set_generate_collisions(bool enabled) {
@@ -728,6 +740,10 @@ void VoxelCubeSphereTerrain::post_edit_area(Box3i box_in_voxels) {
 #endif
 	}
 
+	if (_multiplayer_synchronizer != nullptr && _multiplayer_synchronizer->is_server()) {
+		_multiplayer_synchronizer->send_area(box_in_voxels);
+	}
+
 	try_schedule_mesh_update_from_data(box_in_voxels);
 
 	if (_instancer != nullptr) {
@@ -969,17 +985,24 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 	if (_data_block_enter_info_obj == nullptr) {
 		_data_block_enter_info_obj = gd_make_unique<VoxelDataBlockEnterInfo>();
 	}
-	_data_block_enter_info_obj->network_peer_id = VoxelEngine::get_singleton().get_viewer_network_peer_id(viewer_id);
+	const int network_peer_id = VoxelEngine::get_singleton().get_viewer_network_peer_id(viewer_id);
+	_data_block_enter_info_obj->network_peer_id = network_peer_id;
 	_data_block_enter_info_obj->voxel_block = block;
 	_data_block_enter_info_obj->block_position = bpos;
-
 #if defined(ZN_GODOT)
-	if (!GDVIRTUAL_CALL(_on_data_block_entered, _data_block_enter_info_obj.get())) {
-		WARN_PRINT_ONCE("VoxelCubeSphereTerrain::_on_data_block_entered is unimplemented!");
+	if (!GDVIRTUAL_CALL(_on_data_block_entered, _data_block_enter_info_obj.get()) &&
+			_multiplayer_synchronizer == nullptr) {
+		WARN_PRINT_ONCE("VoxelTerrain::_on_data_block_entered is unimplemented!");
 	}
 #else
-	ERR_PRINT_ONCE("VoxelCubeSphereTerrain::_on_data_block_entered is not supported yet in GDExtension!");
+	ERR_PRINT_ONCE("VoxelTerrain::_on_data_block_entered is not supported yet in GDExtension!");
 #endif
+	//println(format("VoxelTerrain::{} _on_data_block_entered bpos:: {}, {}, {}", String(get_path()), bpos.x, bpos.y, bpos.z));
+
+	if (_multiplayer_synchronizer != nullptr && !Engine::get_singleton()->is_editor_hint() &&
+			network_peer_id != MultiplayerPeer::TARGET_PEER_SERVER && _multiplayer_synchronizer->is_server()) {
+		_multiplayer_synchronizer->send_block(network_peer_id, block, bpos);
+	}
 }
 
 Vector3 VoxelCubeSphereTerrain::convert_block_pos_to_local_position(Vector3 block_position) {
@@ -1284,7 +1307,9 @@ void VoxelCubeSphereTerrain::process_viewers() {
 	}
 
 	const bool can_load_blocks =
-			(_automatic_loading_enabled && (get_stream().is_valid() || get_generator().is_valid())) &&
+			((_automatic_loading_enabled &&
+					 (_multiplayer_synchronizer == nullptr || _multiplayer_synchronizer->is_server())) &&
+					(get_stream().is_valid() || get_generator().is_valid())) &&
 			(Engine::get_singleton()->is_editor_hint() == false || _run_stream_in_editor);
 
 	// Find out which blocks need to appear and which need to be unloaded
@@ -1467,7 +1492,10 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 
 	// View blocks coming into range
 	if (can_load_blocks) {
-		const bool require_notifications = _block_enter_notification_enabled &&
+		const bool require_notifications =
+				(_block_enter_notification_enabled ||
+						(_multiplayer_synchronizer != nullptr && _multiplayer_synchronizer->is_server())) &&
+				VoxelEngine::get_singleton().viewer_exists(viewer_id) && // Could be a destroyed viewer
 				VoxelEngine::get_singleton().is_viewer_requiring_data_block_notifications(viewer_id);
 
 		static thread_local std::vector<VoxelDataBlock> tls_found_blocks;
