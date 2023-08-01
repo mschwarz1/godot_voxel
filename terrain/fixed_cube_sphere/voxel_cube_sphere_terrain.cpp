@@ -608,7 +608,7 @@ Dictionary VoxelCubeSphereTerrain::_b_get_statistics() const {
 void VoxelCubeSphereTerrain::start_updater() {
 	Ref<VoxelMesherBlocky> blocky_mesher = _mesher;
 	if (blocky_mesher.is_valid()) {
-		Ref<VoxelBlockyLibrary> library = blocky_mesher->get_library();
+		Ref<VoxelBlockyLibraryBase> library = blocky_mesher->get_library();
 		if (library.is_valid()) {
 			// TODO Any way to execute this function just after the TRES resource loader has finished to load?
 			// VoxelBlockyLibrary should be baked ahead of time, like MeshLibrary
@@ -1667,6 +1667,7 @@ bool VoxelCubeSphereTerrain::try_set_block_data(Vector3i position, std::shared_p
 	}
 
 	if (refcount.get() == 0) {
+		print_line(String("No paired viewers for received data {0}").format(varray(position)));
 		// Actually, this block is not even in range. So we may ignore it.
 		// If we don't want this behavior, we could introduce a fake viewer that adds a reference to all blocks in
 		// this volume as long as it is enabled?
@@ -1737,15 +1738,15 @@ void VoxelCubeSphereTerrain::process_meshing() {
 #endif
 
 		// print_line(String("DDD request {0}").format(varray(mesh_request.render_block_position.to_vec3())));
-		//  We'll allocate this quite often. If it becomes a problem, it should be easy to pool.
+		// We'll allocate this quite often. If it becomes a problem, it should be easy to pool.
 		MeshBlockTask *task = ZN_NEW(MeshBlockTask);
 		task->volume_id = _volume_id;
 		task->mesh_block_position = mesh_block_pos;
 		task->mesh_block_position_offset = CalculatePositionOffset(mesh_block_pos * get_mesh_block_size());
 		task->lod_index = 0;
 		task->meshing_dependency = _meshing_dependency;
-		task->data_block_size = get_data_block_size();
 		task->collision_hint = _generate_collisions;
+		task->data = _data;
 
 		// This iteration order is specifically chosen to match VoxelEngine and threaded access
 		_data->get_blocks_with_voxel_data(data_box, 0, to_span(task->blocks));

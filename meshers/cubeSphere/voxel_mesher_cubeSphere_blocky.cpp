@@ -32,8 +32,7 @@ inline bool is_on_edge(Vector3i voxPos, int curveMax) {
 
 	return false;
 }
-
-inline bool is_face_visible(const VoxelBlockyLibrary::BakedData &lib, const VoxelBlockyModel::BakedData &vt,
+inline bool is_face_visible(const VoxelBlockyLibraryBase::BakedData &lib, const VoxelBlockyModel::BakedData &vt,
 		uint32_t other_voxel_id, int side, Vector3i voxPos, int curveMax) {
 	if (other_voxel_id < lib.models.size()) {
 		const VoxelBlockyModel::BakedData &other_vt = lib.models[other_voxel_id];
@@ -43,20 +42,13 @@ inline bool is_face_visible(const VoxelBlockyLibrary::BakedData &lib, const Voxe
 			const unsigned int ai = vt.model.side_pattern_indices[side];
 			const unsigned int bi = other_vt.model.side_pattern_indices[g_opposite_side[side]];
 			// Patterns are not the same, and B does not occlude A
-			bool patAndOcclusion = ((ai != bi) && !lib.get_side_pattern_occlusion(bi, ai));
-
-			if (!patAndOcclusion) {
-				if (is_on_edge(voxPos, curveMax)) {
-					return true;
-				}
-			}
-			return patAndOcclusion;
+			return (ai != bi) && !lib.get_side_pattern_occlusion(bi, ai);
 		}
 	}
 	return true;
 }
 
-inline bool contributes_to_ao(const VoxelBlockyLibrary::BakedData &lib, uint32_t voxel_id) {
+inline bool contributes_to_ao(const VoxelBlockyLibraryBase::BakedData &lib, uint32_t voxel_id) {
 	if (voxel_id < lib.models.size()) {
 		const VoxelBlockyModel::BakedData &t = lib.models[voxel_id];
 		return t.contributes_to_ao;
@@ -141,7 +133,7 @@ Vector3d CalculateVertPosition(
 template <typename Type_T>
 void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_arrays_per_material,
 		VoxelMesher::Output::CollisionSurface *collision_surface, const Span<Type_T> type_buffer,
-		const Vector3i block_size, const VoxelBlockyLibrary::BakedData &library, bool bake_occlusion,
+		const Vector3i block_size, const VoxelBlockyLibraryBase::BakedData &library, bool bake_occlusion,
 		float baked_occlusion_darkness, int curveRes, int heightRes, Vector3i origin, Vector3d offset) {
 	// TODO Optimization: not sure if this mandates a template function. There is so much more happening in this
 	// function other than reading voxels, although reading is on the hottest path. It needs to be profiled. If
@@ -248,8 +240,8 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 						// This side is empty
 						continue;
 					}
-					const int neighbor_index = voxel_index + side_neighbor_lut[side];
-					const uint32_t neighbor_voxel_id = type_buffer[neighbor_index];
+					const uint32_t neighbor_voxel_id = type_buffer[voxel_index + side_neighbor_lut[side]];
+
 					Vector3i voxPos = Vector3i(x - 1, y - 1, z - 1) + origin;
 
 					if (!is_face_visible(library, voxel, neighbor_voxel_id, side, voxPos, curveRes)) {
@@ -610,7 +602,7 @@ void VoxelMesherCubeSphereBlocky::build(VoxelMesher::Output &output, const Voxel
 	{
 		// We can only access baked data. Only this data is made for multithreaded access.
 		RWLockRead lock(params.library->get_baked_data_rw_lock());
-		const VoxelBlockyLibrary::BakedData &library_baked_data = params.library->get_baked_data();
+		const VoxelBlockyLibraryBase::BakedData &library_baked_data = params.library->get_baked_data();
 
 		material_count = library_baked_data.indexed_materials_count;
 

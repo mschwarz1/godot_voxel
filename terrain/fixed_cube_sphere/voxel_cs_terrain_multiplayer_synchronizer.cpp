@@ -47,19 +47,19 @@ void VoxelCSTerrainMultiplayerSynchronizer::send_block(
 	ZN_ASSERT_RETURN(result.success);
 
 	PackedByteArray data;
-	data.resize(4 * sizeof(int16_t) + result.data.size());
+	data.resize(4 * sizeof(int32_t) + result.data.size());
 
 	ByteSpanWithPosition mw_span(Span<uint8_t>(data.ptrw(), data.size()), 0);
 	MemoryWriterExistingBuffer mw(mw_span, ENDIANESS_LITTLE_ENDIAN);
 
-	mw.store_16(bpos.x);
-	mw.store_16(bpos.y);
-	mw.store_16(bpos.z);
+	mw.store_32(bpos.x);
+	mw.store_32(bpos.y);
+	mw.store_32(bpos.z);
 	ZN_ASSERT_RETURN(result.data.size() <= 65535);
-	mw.store_16(result.data.size());
+	mw.store_32(result.data.size());
 	mw.store_buffer(to_span(result.data));
 
-	// print_line(String("Server: send block {0}").format(varray(bpos)));
+	//print_line(String("Server: send block {0}").format(varray(bpos)));
 
 	// rpc_id(viewer_peer_id, VoxelStringNames::get_singleton().receive_block, data);
 	// Instead of sending it right away, defer it until the terrain finished processing. Sending individual blocks with
@@ -179,7 +179,7 @@ void VoxelCSTerrainMultiplayerSynchronizer::_b_receive_blocks(PackedByteArray da
 	ZN_PROFILE_SCOPE();
 	ZN_ASSERT_RETURN(_terrain != nullptr);
 
-	// print_line(String("Client: receive blocks data {1}").format(varray(data.size())));
+	//print_line(String("Client: receive blocks data {1}").format(varray(data.size())));
 	//  print_data_hex(Span<const uint8_t>(data.ptr(), data.size()));
 
 	MemoryReader mr(Span<const uint8_t>(data.ptr(), data.size()), ENDIANESS_LITTLE_ENDIAN);
@@ -190,11 +190,11 @@ void VoxelCSTerrainMultiplayerSynchronizer::_b_receive_blocks(PackedByteArray da
 		Vector3i bpos;
 		// This effectively limits volume size to 1,048,576. If really required, we could double this data to cover
 		// more.
-		bpos.x = int16_t(mr.get_16());
-		bpos.y = int16_t(mr.get_16());
-		bpos.z = int16_t(mr.get_16());
-		const int voxel_data_size = mr.get_16();
-		// print_line(String("Client: receive block {0} data {1}").format(varray(bpos, voxel_data_size)));
+		bpos.x = int32_t(mr.get_32());
+		bpos.y = int32_t(mr.get_32());
+		bpos.z = int32_t(mr.get_32());
+		const int voxel_data_size = mr.get_32();
+		//print_line(String("Client: receive block {0} data {1}").format(varray(bpos, voxel_data_size)));
 
 		VoxelBufferInternal voxels;
 		ZN_ASSERT_RETURN(BlockSerializer::decompress_and_deserialize(mr.data.sub(mr.pos, voxel_data_size), voxels));

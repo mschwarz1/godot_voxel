@@ -238,7 +238,7 @@ static void collect_boxes(
 	
 	else if (try_get_as(p_terrain.get_mesher(), mesher_cube_sphere_blocky)) 
 	{
-		Ref<VoxelBlockyLibrary> library_ref = mesher_cube_sphere_blocky->get_library();
+		Ref<VoxelBlockyLibraryBase> library_ref = mesher_cube_sphere_blocky->get_library();
 		ERR_FAIL_COND_MSG(library_ref.is_null(), "VoxelMesherBlocky has no library assigned");
 		const int channel = VoxelBufferInternal::CHANNEL_TYPE;
 		VoxelSingleValue defval;
