@@ -8,12 +8,12 @@ on:
 # Global Cache Settings
 # SCONS_CACHE for windows must be set in the build environment
 env:
-  GODOT_BASE_BRANCH: "4.0"
+  GODOT_BASE_BRANCH: "4.1"
   SCONS_CACHE_MSVC_CONFIG: true
   SCONS_CACHE_LIMIT: 4096
 
 jobs:
-  windows-editor:
+  windows:
     # Windows 10 with latest image
     runs-on: "windows-latest"
     name: ${{matrix.name}}
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: godotengine/godot
-          ref: "4.0"
+          ref: ${{ env.GODOT_BASE_BRANCH }}
 
       # Clone our module under the correct directory
       - uses: actions/checkout@v3
@@ -49,16 +49,16 @@ jobs:
       # Upload cache on completion and check it out now
       # Editing this is pretty dangerous for Windows since it can break and needs to be properly tested with a fresh cache.
       - name: Load .scons_cache directory
-        id: windows-editor-cache
+        id: windows-cache
         #uses: ${{matrix.cache_action}}
         uses: actions/cache@v3
         with:
           path: /.scons_cache/
-          key: ${{github.job}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
+          key: ${{github.job}}-${{matrix.target}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
           restore-keys: |
-            ${{github.job}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
-            ${{github.job}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}
-            ${{github.job}}-${{env.GODOT_BASE_BRANCH}}
+            ${{github.job}}-${{matrix.target}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}-${{github.sha}}
+            ${{github.job}}-${{matrix.target}}-${{env.GODOT_BASE_BRANCH}}-${{github.ref}}
+            ${{github.job}}-${{matrix.target}}-${{env.GODOT_BASE_BRANCH}}
 
       # Use python 3.x release (works cross platform; best to keep self contained in it's own step)
       - name: Set up Python 3.x

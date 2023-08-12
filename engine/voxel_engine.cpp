@@ -70,7 +70,12 @@ VoxelEngine::VoxelEngine(ThreadsConfig threads_config) {
 	ZN_PRINT_VERBOSE(format("Size of SaveBlockDataTask: {}", sizeof(SaveBlockDataTask)));
 	ZN_PRINT_VERBOSE(format("Size of MeshBlockTask: {}", sizeof(MeshBlockTask)));
 
-	_rendering_device = RenderingServer::get_singleton()->create_local_rendering_device();
+	if (RenderingServer::get_singleton() != nullptr) {
+		_rendering_device = RenderingServer::get_singleton()->create_local_rendering_device();
+	} else {
+		// Sadly, that happens. This is a problem in GDExtension...
+		ZN_PRINT_ERROR("RenderingServer singleton is null when creating VoxelEngine!");
+	}
 
 	if (_rendering_device != nullptr) {
 		Ref<RDSamplerState> sampler_state;
@@ -107,6 +112,14 @@ void VoxelEngine::load_shaders() {
 		_detail_modifier_mesh_shader.load_from_glsl(String(g_detail_modifier_shader_template_0) +
 						String(g_modifier_mesh_shader_snippet) + String(g_detail_modifier_shader_template_1),
 				"zylann.voxel.detail_modifier_mesh_shader");
+
+		_block_modifier_sphere_shader.load_from_glsl(String(g_block_modifier_shader_template_0) +
+						String(g_modifier_sphere_shader_snippet) + String(g_block_modifier_shader_template_1),
+				"zylann.voxel.block_modifier_sphere_shader");
+
+		_block_modifier_mesh_shader.load_from_glsl(String(g_block_modifier_shader_template_0) +
+						String(g_modifier_mesh_shader_snippet) + String(g_block_modifier_shader_template_1),
+				"zylann.voxel.block_modifier_mesh_shader");
 	}
 }
 
@@ -121,12 +134,14 @@ VoxelEngine::~VoxelEngine() {
 	_gpu_task_runner.stop();
 
 	if (_rendering_device != nullptr) {
-		// Free these explicitly because we are going to free the RenderindDevice, too.
+		// Free these explicitly because we are going to free the RenderingDevice, too.
 		_dilate_normalmap_shader.clear();
 		_detail_gather_hits_shader.clear();
 		_detail_normalmap_shader.clear();
 		_detail_modifier_sphere_shader.clear();
 		_detail_modifier_mesh_shader.clear();
+		_block_modifier_sphere_shader.clear();
+		_block_modifier_mesh_shader.clear();
 
 		free_rendering_device_rid(*_rendering_device, _filtering_sampler_rid);
 		_filtering_sampler_rid = RID();
@@ -348,6 +363,8 @@ void VoxelEngine::process() {
 		// - Hysteresis is needed to reduce ping-pong
 		_world.shared_priority_dependency->highest_view_distance = max_distance * 2;
 	}
+
+	ZN_PROFILE_PLOT("Pending GPU tasks", int64_t(_gpu_task_runner.get_pending_task_count()));
 }
 
 static unsigned int debug_get_active_thread_count(const zylann::ThreadedTaskRunner &pool) {

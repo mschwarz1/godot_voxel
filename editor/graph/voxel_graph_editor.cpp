@@ -831,9 +831,9 @@ void VoxelGraphEditor::set_preview_transform(Vector2f offset, float scale) {
 
 Vector2 get_graph_offset_from_mouse(const GraphEdit *graph_edit, const Vector2 local_mouse_pos) {
 	// TODO Ask for a method, or at least documentation about how it's done
-	Vector2 offset = graph_edit->get_scroll_ofs() + local_mouse_pos;
-	if (graph_edit->is_using_snap()) {
-		const int snap = graph_edit->get_snap();
+	Vector2 offset = get_graph_edit_scroll_offset(*graph_edit) + local_mouse_pos;
+	if (is_graph_edit_using_snapping(*graph_edit)) {
+		const int snap = get_graph_edit_snapping_distance(*graph_edit);
 		offset = offset.snapped(Vector2(snap, snap));
 	}
 	offset /= EDSCALE;
@@ -953,6 +953,9 @@ void VoxelGraphEditor::update_previews(bool with_live_update) {
 	ZN_PRINT_VERBOSE(format("Previews generated in {} us", time_taken));
 
 	if (_live_update_enabled && with_live_update) {
+		// TODO Use that hash to prevent full recompiling, because the `changed` now reports ANY changes, including
+		// those that don't require recompiling...
+
 		// Check if the graph changed in a way that actually changes the output,
 		// because re-generating all voxels is expensive.
 		// Note, sub-resouces can be involved, not just node connections and properties.

@@ -166,14 +166,16 @@ void DebugRenderer::set_world(World3D *world) {
 }
 
 void DebugRenderer::begin() {
-	CRASH_COND(_inside_block);
-	CRASH_COND(_world == nullptr);
+	ZN_ASSERT_RETURN(_inside_block == false);
+	ZN_ASSERT_RETURN(_world != nullptr);
 	_current = 0;
 	_inside_block = true;
 	_mm_renderer.begin();
 }
 
 void DebugRenderer::draw_box(const Transform3D &t, DebugColors::ColorID color) {
+	ZN_ASSERT_RETURN(_world != nullptr);
+
 	// Pick an existing item, or create one
 	DebugRendererItem *item;
 	if (_current >= _items.size()) {
@@ -196,7 +198,8 @@ void DebugRenderer::draw_box_mm(const Transform3D &t, Color8 color) {
 }
 
 void DebugRenderer::end() {
-	CRASH_COND(!_inside_block);
+	ZN_ASSERT_RETURN(_inside_block);
+
 	// Hide exceeding items
 	for (unsigned int i = _current; i < _items.size(); ++i) {
 		DebugRendererItem *item = _items[i];
@@ -208,7 +211,9 @@ void DebugRenderer::end() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-DebugMultiMeshRenderer::DebugMultiMeshRenderer() {
+DebugMultiMeshRenderer::DebugMultiMeshRenderer() {}
+
+void DebugMultiMeshRenderer::init() {
 	_multimesh_instance.create();
 	// TODO When shadow casting is on, directional shadows completely break.
 	// The reason is still unknown.
@@ -237,6 +242,11 @@ DebugMultiMeshRenderer::~DebugMultiMeshRenderer() {
 }
 
 void DebugMultiMeshRenderer::set_world(World3D *world) {
+	if (_initialized == false) {
+		init();
+		_initialized = true;
+	}
+
 	_multimesh_instance.set_world(world);
 	_world = world;
 }
@@ -271,7 +281,10 @@ void DebugMultiMeshRenderer::end() {
 
 void DebugMultiMeshRenderer::clear() {
 	_items.clear();
-	_multimesh->set_instance_count(0);
+	// Can be null if `init()` hasn't been called
+	if (_multimesh.is_valid()) {
+		_multimesh->set_instance_count(0);
+	}
 }
 
 } // namespace zylann

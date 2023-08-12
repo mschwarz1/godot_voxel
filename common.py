@@ -54,6 +54,8 @@ def get_sources(env, is_editor_build):
         "terrain/variable_lod/*.cpp",
 
         "engine/*.cpp",
+        "engine/gpu/*.cpp",
+
         "edition/*.cpp",
         "shaders/*.cpp",
 
@@ -69,6 +71,7 @@ def get_sources(env, is_editor_build):
         "util/tasks/*.cpp",
         "util/tasks/godot/*.cpp",
 
+        "util/godot/classes/array_mesh.cpp",
         "util/godot/classes/concave_polygon_shape_3d.cpp",
         "util/godot/classes/geometry_2d.cpp",
         "util/godot/classes/input_event_key.cpp",

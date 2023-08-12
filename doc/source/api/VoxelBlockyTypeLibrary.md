@@ -2,16 +2,17 @@
 
 Inherits: [VoxelBlockyLibraryBase](VoxelBlockyLibraryBase.md)
 
-!!! warn
+!!! warning
     This class is marked as experimental. It is subject to likely change or possible removal in future versions. Use at your own discretion.
 
 
 ## Properties: 
 
 
-Type                 | Name               | Default 
--------------------- | ------------------ | --------
-`VoxelBlockyType[]`  | [types](#i_types)  | []      
+Type                 | Name                             | Default             
+-------------------- | -------------------------------- | --------------------
+`PackedStringArray`  | [_id_map_data](#i__id_map_data)  | PackedStringArray() 
+`VoxelBlockyType[]`  | [types](#i_types)                | []                  
 <p></p>
 
 ## Methods: 
@@ -31,6 +32,9 @@ Return                                                                          
 <p></p>
 
 ## Property Descriptions
+
+- [PackedStringArray](https://docs.godotengine.org/en/stable/classes/class_packedstringarray.html)<span id="i__id_map_data"></span> **_id_map_data** = PackedStringArray()
+
 
 - [VoxelBlockyType[]](https://docs.godotengine.org/en/stable/classes/class_voxelblockytype[].html)<span id="i_types"></span> **types** = []
 
@@ -64,4 +68,4 @@ Return                                                                          
 - [PackedStringArray](https://docs.godotengine.org/en/stable/classes/class_packedstringarray.html)<span id="i_serialize_id_map_to_string_array"></span> **serialize_id_map_to_string_array**( ) 
 
 
-_Generated on Jun 18, 2023_
+_Generated on Jul 23, 2023_

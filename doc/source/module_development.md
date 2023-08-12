@@ -405,17 +405,55 @@ Some can be specified through SCons command line parameters.
 - `ZN_GODOT_EXTENSION`: must be defined when compiling this project as a GDExtension.
 
 
+Shaders
+---------
+
+The module contains shaders for some of its features, mainly compute shaders. They are found under the `shaders/dev/` folder.
+
+`shaders/dev` contains a Godot project. The purpose of this project is mainly to quickly test if shaders compile properly, and eventually test them with simple scenes and GDScript code.
+
+There are several ways shaders are written:
+
+- Plain: regular shaders, which will be used as-is.
+- Templates: these contain `<PLACEHOLDER>` sections, which the engine will replace with generated code. Code inside those sections will be replaced and is only present to make the shader compile in the test project.
+- Snippets: these contain `<SNIPPET>` sections, which will be inserted into templates or other generated code. Code outside those sections will not be used and is only present to make the shader compile in the test project.
+
+Shipping external files when compiling as a module is inconvenient, so instead they are embedded in C++ directly, similarly to how Godot does. A script can be executed to update those generated files. You must open a command line inside the `shaders/` folder and run `python text2cpp.py`.
+
+Currently, C++ code generating shaders is intertwined with the contents of those shaders. For example, C++ strings in code generation can contain variable names found in GLSL files, so you should have both open to understand the context.
+
+
+Using the module from another module
+----------------------------------------
+
+Writing a custom C++ module directly in Godot is one way to access features of Godot and the voxel engine more directly, which can be better for performance and more stable than a GDExtension. You can do this too if you want to create a custom generator, mesher, stream, or just use components of the module, without having to modify the module directly.
+
+You can include files from the voxel module by using `modules/voxel/` in your includes:
+
+```cpp
+#include <modules/voxel/storage/voxel_buffer_internal.h>
+```
+
+You will also need to define preprocessor macros in your `SCsub` file:
+
+```py
+env_yourmodule.Append(CPPDEFINES = [
+    'ZN_GODOT'
+])
+```
+
+
 GDExtension
 -------------
 
-!!! warn
+!!! warning
     This feature is under development and is not ready for production. It has bugs and can crash the engine. Check the [issue tracker](https://github.com/Zylann/godot_voxel/issues/333) for work in progress.
 
 This module can compile as a GDExtension library. This allows to distribute it as a library file (`.dll`, `.so`...) without having to recompile Godot Engine. TODO: Godot's documentation doesn't seem to contain information about GDExtension yet. For now, you can check [this old news](https://godotengine.org/article/introducing-gd-extensions) and the [GodotCpp repository](https://github.com/godotengine/godot-cpp).
 
 To compile the library:
 - Download a copy of [GodotCpp](https://github.com/godotengine/godot-cpp)
-- In the voxel module's root directory, write the path to GodotCpp at the beginning of the `SConstruct` script.
+- In the voxel module's root directory, write the path to GodotCpp at the beginning of the `SConstruct` script, or set the environment variable from command line.
 - Open the same kind of console you would use to compile Godot, change directory to the voxel module's root folder, and run SCons there. It will use the `SConstruct` file instead of `SCsub`. The library will be saved under a `bin/` folder.
 
 Example of build command on Windows (unoptimized debug build for use in editor):
@@ -423,16 +461,7 @@ Example of build command on Windows (unoptimized debug build for use in editor):
 scons platform=windows target=debug -j4
 ```
 
-Example of `voxel.gdextension` file for Godot to detect the library (Windows 64-bits only):
-```
-[configuration]
+The built library will be placed inside the `project/` folder, which contains a Godot 4 project. It is then possible to open it to test the extension. Note that it might not be setup for all platforms yet (so far Windows 64-bits is setup).
 
-entry_symbol = "voxel_library_init"
-
-[libraries]
-
-windows.debug.x86_64 = "res://addons/zylann.voxel/bin/libvoxel.windows.tools.debug.x86_64.dll"
-```
-
-There are a number of issues to address before this target can be usable. The module wasn't tested at all at the moment. Check the [issue tracker](https://github.com/Zylann/godot_voxel/issues/333) for work in progress.
+There are a number of issues to address before this target can be usable. The extension is able to run, but there are known issues. Check the [issue tracker](https://github.com/Zylann/godot_voxel/issues/333) for work in progress.
 
