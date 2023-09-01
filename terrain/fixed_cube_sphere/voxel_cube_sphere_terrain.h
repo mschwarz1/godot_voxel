@@ -62,7 +62,7 @@ public:
 	void set_mesh_block_size(unsigned int p_block_size);
 
 	void post_edit_voxel(Vector3i pos);
-	void post_edit_area(Box3i box_in_voxels);
+	void post_edit_area(Box3i box_in_voxels, bool update_mesh);
 
 	void set_generate_collisions(bool enabled);
 	bool get_generate_collisions() const {
@@ -92,6 +92,9 @@ public:
 
 	void set_debug(bool debugEnabled);
 	bool get_debug() const;
+
+	void set_generator_use_gpu(bool enabled);
+	bool get_generator_use_gpu() const;
 
 
 	void set_material_override(Ref<Material> material);
@@ -155,7 +158,12 @@ public:
 	
 	void set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer);
 	const VoxelCSTerrainMultiplayerSynchronizer *get_multiplayer_synchronizer() const;
+
+#ifdef TOOLS_ENABLED
+	void get_configuration_warnings(PackedStringArray &warnings) const override;
+#endif // TOOLS_ENABLED
 	
+
 	Array get_mesh_block_surface(Vector3i block_pos) const;
 
 	VolumeID get_volume_id() const override {
@@ -209,7 +217,8 @@ private:
 	void emit_data_block_loading(Vector3i bpos);
 	void emit_data_block_loaded(Vector3i bpos);
 	void emit_data_block_unloaded(Vector3i bpos);
-
+	void emit_mesh_block_entered(Vector3i bpos);
+	void emit_mesh_block_exited(Vector3i bpos);
 	bool try_get_paired_viewer_index(ViewerID id, size_t &out_i) const;
 
 	void notify_data_block_enter(const VoxelDataBlock &block, Vector3i bpos, ViewerID viewer_id);
@@ -308,6 +317,7 @@ private:
 	bool _area_edit_notification_enabled = false;
 	// If enabled, VoxelViewers will cause blocks to automatically load around them.
 	bool _automatic_loading_enabled = true;
+	bool _generator_use_gpu = false;
 
 	Ref<Material> _material_override;
 

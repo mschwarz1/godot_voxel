@@ -263,7 +263,7 @@ void VoxelToolCubeSphereTerrain::_set_voxel_f(Vector3i pos, float v) {
 
 void VoxelToolCubeSphereTerrain::_post_edit(const Box3i &box) {
 	ERR_FAIL_COND(_terrain == nullptr);
-	_terrain->post_edit_area(box);
+	_terrain->post_edit_area(box, true);
 }
 
 void VoxelToolCubeSphereTerrain::set_voxel_metadata(Vector3i pos, Variant meta) {
