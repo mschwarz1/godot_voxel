@@ -7,6 +7,7 @@
 #include "../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../util/godot/Core/array.h"
 #include "../util/godot/Classes/ref_counted.h"
+#include "../util/godot/funcs.h"
 #include "../util/math/conv.h"
 #include "../util/voxel_raycast.h"
 
@@ -59,6 +60,8 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 		const VoxelData &data;
 		const VoxelBlockyLibraryBase::BakedData &baked_data;
 		const uint32_t collision_mask;
+		const Vector3 p_from;
+		const Vector3 p_to;
 
 		bool operator()(const VoxelRaycastState &rs) const {
 			VoxelSingleValue defval;
@@ -70,20 +73,14 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 			}
 
 			const VoxelBlockyModel::BakedData &model = baked_data.models[v];
-			if (model.empty) {
-				return false;
-			}
-
 			if ((model.box_collision_mask & collision_mask) == 0) {
 				return false;
 			}
 
-			if (model.transparency_index == 0) {
-				return true;
-			}
-
-			if (model.transparency_index > 0 && model.box_collision_aabbs.size() > 0) {
-				return true;
+			for (const AABB &aabb : model.box_collision_aabbs) {
+				if (AABB(aabb.position + rs.hit_position, aabb.size).intersects_segment(p_from, p_to)) {
+					return true;
+				}
 			}
 
 			return false;
@@ -110,7 +107,8 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 		if (library_ref.is_null()) {
 			return res;
 		}
-		RaycastPredicateBlocky predicate{ _terrain->get_storage(), library_ref->get_baked_data(), p_collision_mask };
+		RaycastPredicateBlocky predicate{ _terrain->get_storage(), library_ref->get_baked_data(), p_collision_mask,
+			local_pos, local_pos + local_dir * max_distance };
 		float hit_distance;
 		float hit_distance_prev;
 		if (zylann::voxel_raycast(local_pos, local_dir, predicate, max_distance, hit_pos, prev_pos, hit_distance,
@@ -149,13 +147,12 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 	return res;
 }
 
-void VoxelToolCubeSphereTerrain::copy(Vector3i pos, Ref<gd::VoxelBuffer> dst, uint8_t channels_mask) const {
+void VoxelToolCubeSphereTerrain::copy(Vector3i pos, VoxelBufferInternal &dst, uint8_t channels_mask) const {
 	ERR_FAIL_COND(_terrain == nullptr);
-	ERR_FAIL_COND(dst.is_null());
 	if (channels_mask == 0) {
 		channels_mask = (1 << _channel);
 	}
-	_terrain->get_storage().copy(pos, dst->get_buffer(), channels_mask);
+	_terrain->get_storage().copy(pos, dst, channels_mask);
 }
 
 void VoxelToolCubeSphereTerrain::paste(Vector3i pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask) {
@@ -326,8 +323,8 @@ void VoxelToolCubeSphereTerrain::run_blocky_random_tick_static(VoxelData &data, 
 		picks.clear();
 
 		{
-			VoxelSpatialLock &spatial_lock = data.get_spatial_lock(0);
-			VoxelSpatialLockRead srlock(spatial_lock, BoxBounds3i::from_position(block_pos));
+			SpatialLock3D &spatial_lock = data.get_spatial_lock(0);
+			SpatialLock3D::Read srlock(spatial_lock, BoxBounds3i::from_position(block_pos));
 
 			std::shared_ptr<VoxelBufferInternal> voxels_ptr = data.try_get_block_voxels(block_pos);
 
@@ -464,6 +461,8 @@ void VoxelToolCubeSphereTerrain::for_each_voxel_metadata_in_area(AABB voxel_area
 		const Vector3i block_origin = block_pos * data.get_block_size();
 		const Box3i rel_voxel_box(voxel_box.pos - block_origin, voxel_box.size);
 		// TODO Worth it locking blocks for metadata?
+		// For read or write? We'd have to specify as argument and trust the user... since metadata can contain
+		// reference types.
 
 #if defined(ZN_GODOT)
 		voxels_ptr->for_each_voxel_metadata_in_area(
@@ -488,6 +487,146 @@ void VoxelToolCubeSphereTerrain::for_each_voxel_metadata_in_area(AABB voxel_area
 					   "Callables");
 #endif
 	});
+}
+
+namespace {
+AABB get_path_aabb(Span<const Vector3> positions, Span<const float> radii) {
+	AABB aabb(positions[0], Vector3());
+
+	for (unsigned int i = 0; i < positions.size(); ++i) {
+		const Vector3 pos = positions[i];
+		const float r = radii[i];
+		const Vector3 extentv(r, r, r);
+		aabb = aabb.expand(pos - extentv);
+		aabb = aabb.expand(pos + extentv);
+	}
+
+	return aabb;
+}
+} // namespace
+
+void VoxelToolCubeSphereTerrain::do_path(PackedVector3Array p_positions, PackedFloat32Array p_radii) {
+	ZN_PROFILE_SCOPE();
+	ZN_ASSERT_RETURN(p_positions.size() >= 2);
+	ZN_ASSERT_RETURN(p_positions.size() == p_radii.size());
+
+	Span<const Vector3> positions = to_span(p_positions);
+	Span<const float> radii = to_span(p_radii);
+
+	// TODO Increase margin a bit with smooth voxels?
+	const float margin = 1.f;
+
+	// Compute total bounding box
+
+	const AABB total_aabb = get_path_aabb(positions, radii).grow(margin);
+
+	const Box3i total_voxel_box(to_vec3i(math::floor(total_aabb.position)), to_vec3i(math::ceil(total_aabb.size)));
+	const VoxelBufferInternal::ChannelId channel = get_channel();
+	const VoxelTool::Mode mode = get_mode();
+
+	VoxelDataGrid grid;
+
+	VoxelData &data = _terrain->get_storage();
+
+	data.get_blocks_grid(grid, total_voxel_box, 0);
+
+	grid.lock_write();
+
+	// Rasterize
+
+	struct SdfRoundCone {
+		math::SdfRoundConePrecalc cone;
+		real_t sdf_scale;
+
+		inline real_t operator()(Vector3 pos) const {
+			return sdf_scale * cone(pos);
+		}
+
+		inline bool is_inside(Vector3 pos) const {
+			return cone(pos) < 0.f;
+		}
+	};
+
+	for (unsigned int point_index = 1; point_index < positions.size(); ++point_index) {
+		// TODO Could run this in local space so we dont need doubles
+		// TODO Apply terrain scale
+		const Vector3 p0 = positions[point_index - 1];
+		const Vector3 p1 = positions[point_index];
+
+		const float r0 = radii[point_index - 1];
+		const float r1 = radii[point_index];
+
+		const float r0m = r0 + margin;
+		const float r1m = r1 + margin;
+
+		const Vector3 minp( //
+				math::min(p0.x - r0m, p1.x - r1m), //
+				math::min(p0.y - r0m, p1.y - r1m), //
+				math::min(p0.z - r0m, p1.z - r1m));
+
+		const Vector3 maxp( //
+				math::max(p0.x + r0m, p1.x + r1m), //
+				math::max(p0.y + r0m, p1.y + r1m), //
+				math::max(p0.z + r0m, p1.z + r1m));
+
+		const Box3i segment_box = Box3i::from_min_max(to_vec3i(math::floor(minp)), to_vec3i(math::ceil(maxp)));
+
+		SdfRoundCone shape;
+		shape.cone.a = p0;
+		shape.cone.b = p1;
+		shape.cone.r1 = r0;
+		shape.cone.r2 = r1;
+		shape.cone.update();
+		shape.sdf_scale = get_sdf_scale();
+
+		if (channel == VoxelBufferInternal::CHANNEL_SDF) {
+			switch (mode) {
+				case MODE_ADD: {
+					// TODO Support other depths, format should be accessible from the volume. Or separate encoding?
+					ops::SdfOperation16bit<ops::SdfUnion, SdfRoundCone> op;
+					op.shape = shape;
+					op.op.strength = get_sdf_strength();
+					grid.write_box_no_lock(segment_box, VoxelBufferInternal::CHANNEL_SDF, op);
+				} break;
+
+				case MODE_REMOVE: {
+					ops::SdfOperation16bit<ops::SdfSubtract, SdfRoundCone> op;
+					op.shape = shape;
+					op.op.strength = get_sdf_strength();
+					grid.write_box_no_lock(segment_box, VoxelBufferInternal::CHANNEL_SDF, op);
+				} break;
+
+				case MODE_SET: {
+					ops::SdfOperation16bit<ops::SdfSet, SdfRoundCone> op;
+					op.shape = shape;
+					op.op.strength = get_sdf_strength();
+					grid.write_box_no_lock(segment_box, VoxelBufferInternal::CHANNEL_SDF, op);
+				} break;
+
+				case MODE_TEXTURE_PAINT: {
+					ops::TextureBlendOp<SdfRoundCone> op;
+					op.shape = shape;
+					op.texture_params = _texture_params;
+					grid.write_box_2_no_lock(segment_box, VoxelBufferInternal::CHANNEL_INDICES,
+							VoxelBufferInternal::CHANNEL_WEIGHTS, op);
+				} break;
+
+				default:
+					ERR_PRINT("Unknown mode");
+					break;
+			}
+
+		} else {
+			ops::BlockySetOperation<uint32_t, SdfRoundCone> op;
+			op.shape = shape;
+			op.value = get_value();
+			grid.write_box_no_lock(segment_box, channel, op);
+		}
+	}
+
+	grid.unlock_write();
+
+	_post_edit(total_voxel_box);
 }
 
 void VoxelToolCubeSphereTerrain::_bind_methods() {

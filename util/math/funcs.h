@@ -156,6 +156,13 @@ inline int ceildiv(int x, int d) {
 	// return -floordiv(-x, d);
 }
 
+inline int ceildiv(unsigned int x, unsigned int d) {
+#ifdef DEBUG_ENABLED
+	ZN_ASSERT(d > 0);
+#endif
+	return (x + d - 1) / d;
+}
+
 // TODO Rename `wrapi`
 // `Math::wrapi` with zero min
 inline int wrap(int x, int d) {
@@ -299,6 +306,11 @@ inline void sort(T &a, T &b, T &c, T &d) {
 template <typename T>
 inline T sign_nonzero(T x) {
 	return x < 0 ? -1 : 1;
+}
+
+template <typename T>
+constexpr const T sign(const T v) {
+	return v == 0 ? 0.0f : (v < 0 ? -1.0f : +1.0f);
 }
 
 // Trilinear interpolation between corner values of a unit-sized cube.

@@ -2,6 +2,7 @@
 
 Inherits: [Node3D](https://docs.godotengine.org/en/stable/classes/class_node3d.html)
 
+Inherited by: [VoxelLodTerrain](VoxelLodTerrain.md), [VoxelTerrain](VoxelTerrain.md)
 
 Base class for voxel volumes.
 
@@ -46,4 +47,4 @@ Defines how voxels are transformed into visible meshes.
 
 Primary source of persistent voxel data. If left unassigned, the whole volume will use the generator.
 
-_Generated on Jul 23, 2023_
+_Generated on Oct 15, 2023_

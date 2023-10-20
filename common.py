@@ -43,6 +43,7 @@ def get_sources(env, is_editor_build):
         "generators/*.cpp",
         "generators/graph/*.cpp",
         "generators/simple/*.cpp",
+        "generators/multipass/*.cpp",
 
         "modifiers/*.cpp",
         "modifiers/godot/*.cpp",
@@ -68,6 +69,8 @@ def get_sources(env, is_editor_build):
         "util/noise/fast_noise_lite/*.cpp",
         "util/noise/gd_noise_range.cpp",
         "util/thread/thread.cpp",
+        "util/thread/spatial_lock_2d.cpp",
+        "util/thread/spatial_lock_3d.cpp",
         "util/tasks/*.cpp",
         "util/tasks/godot/*.cpp",
 
@@ -113,6 +116,7 @@ def get_sources(env, is_editor_build):
             "editor/graph/*.cpp",
             "editor/blocky_library/*.cpp",
             "editor/blocky_library/types/*.cpp",
+            "editor/multipass/*.cpp",
 
             "util/godot/classes/editor_plugin.cpp",
             "util/godot/classes/editor_import_plugin.cpp",
@@ -120,6 +124,7 @@ def get_sources(env, is_editor_build):
             "util/godot/classes/editor_property.cpp",
             "util/godot/classes/editor_settings.cpp",
             "util/godot/classes/graph_edit.cpp", # Not editor-only, but only used in editor for now
+            "util/godot/classes/graph_node.cpp" # Not editor-only, but only used in editor for now
         ]
 
     def process_glob_paths(p_sources):

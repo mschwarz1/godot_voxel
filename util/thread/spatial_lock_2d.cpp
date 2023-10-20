@@ -1,15 +1,15 @@
-#include "voxel_spatial_lock.h"
-#include "../util/log.h"
-#include "../util/string_funcs.h"
+#include "spatial_lock_2d.h"
+#include "../log.h"
+#include "../string_funcs.h"
 
 namespace zylann::voxel {
 
-VoxelSpatialLock::VoxelSpatialLock() {
+SpatialLock2D::SpatialLock2D() {
 	_boxes.reserve(8);
 }
 
-void VoxelSpatialLock::remove_box(const BoxBounds3i &box, Mode mode) {
-#ifdef VOXEL_SPATIAL_LOCK_CHECKS
+void SpatialLock2D::remove_box(const BoxBounds2i &box, Mode mode) {
+#ifdef ZN_SPATIAL_LOCK_2D_CHECKS
 	const Thread::ID thread_id = Thread::get_caller_id();
 #endif
 
@@ -17,7 +17,7 @@ void VoxelSpatialLock::remove_box(const BoxBounds3i &box, Mode mode) {
 		const Box &existing_box = _boxes[i];
 
 		if (existing_box.bounds == box && existing_box.mode == mode
-#ifdef VOXEL_SPATIAL_LOCK_CHECKS
+#ifdef ZN_SPATIAL_LOCK_2D_CHECKS
 				&& existing_box.thread_id == thread_id
 #endif
 		) {

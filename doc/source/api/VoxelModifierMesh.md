@@ -4,7 +4,6 @@ Inherits: [VoxelModifier](VoxelModifier.md)
 
 
 
-
 ## Properties: 
 
 
@@ -22,4 +21,4 @@ Type            | Name                     | Default
 - [VoxelMeshSDF](VoxelMeshSDF.md)<span id="i_mesh_sdf"></span> **mesh_sdf**
 
 
-_Generated on Jul 23, 2023_
+_Generated on Oct 15, 2023_

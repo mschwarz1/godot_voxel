@@ -112,7 +112,7 @@ static void copy_block_and_neighbors(Span<std::shared_ptr<VoxelBufferInternal>> 
 		// We are just sampling or generating data in a given area.
 
 		const Vector3i data_block_pos0 = mesh_block_pos * area_info.mesh_block_size_factor;
-		VoxelSpatialLockRead srlock(voxel_data.get_spatial_lock(lod_index),
+		SpatialLock3D::Read srlock(voxel_data.get_spatial_lock(lod_index),
 				BoxBounds3i(data_block_pos0 - Vector3i(1, 1, 1),
 						data_block_pos0 + Vector3iUtil::create(area_info.edge_size)));
 
@@ -281,6 +281,12 @@ int MeshBlockTask::debug_get_running_count() {
 void MeshBlockTask::run(zylann::ThreadedTaskContext &ctx) {
 	ZN_DSTACK();
 	ZN_PROFILE_SCOPE();
+	ZN_ASSERT(meshing_dependency != nullptr);
+#ifdef DEBUG_ENABLED
+	ZN_ASSERT_RETURN_MSG(meshing_dependency->mesher.is_valid(),
+			"Meshing task started without a mesher. Maybe missing on the terrain node?");
+#endif
+
 	if (block_generation_use_gpu) {
 		if (_stage == 0) {
 			gather_voxels_gpu(ctx);
@@ -303,8 +309,6 @@ void MeshBlockTask::gather_voxels_gpu(zylann::ThreadedTaskContext &ctx) {
 	ZN_ASSERT(data != nullptr);
 
 	Ref<VoxelMesher> mesher = meshing_dependency->mesher;
-	ZN_ASSERT_RETURN_MSG(
-			mesher.is_valid(), "Meshing task started without a mesher. Maybe missing on the terrain node?");
 	const unsigned int min_padding = mesher->get_minimum_padding();
 	const unsigned int max_padding = mesher->get_maximum_padding();
 
@@ -366,8 +370,6 @@ void MeshBlockTask::gather_voxels_cpu() {
 	ZN_ASSERT(data != nullptr);
 
 	Ref<VoxelMesher> mesher = meshing_dependency->mesher;
-	ZN_ASSERT_RETURN_MSG(
-			mesher.is_valid(), "Meshing task started without a mesher. Maybe missing on the terrain node?");
 	const unsigned int min_padding = mesher->get_minimum_padding();
 	const unsigned int max_padding = mesher->get_maximum_padding();
 

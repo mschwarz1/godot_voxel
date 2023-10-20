@@ -23,7 +23,7 @@ public:
 	void set_voxel_metadata(Vector3i pos, Variant meta) override;
 	Variant get_voxel_metadata(Vector3i pos) const override;
 
-	void copy(Vector3i pos, Ref<gd::VoxelBuffer> dst, uint8_t channels_mask) const override;
+	void copy(Vector3i pos, VoxelBufferInternal &dst, uint8_t channels_mask) const override;
 	void paste(Vector3i pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask) override;
 	void paste_masked(Vector3i pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask, uint8_t mask_channel,
 			uint64_t mask_value) override;
@@ -43,6 +43,8 @@ public:
 			bool (*callback)(void *, Vector3i, int64_t));
 
 	void for_each_voxel_metadata_in_area(AABB voxel_area, const Callable &callback);
+
+	void do_path(PackedVector3Array p_positions, PackedFloat32Array p_radii);
 
 protected:
 	uint64_t _get_voxel(Vector3i pos) const override;

@@ -2,12 +2,11 @@
 
 Inherits: [RefCounted](https://docs.godotengine.org/en/stable/classes/class_refcounted.html)
 
-
 3D grid storing voxel data.
 
 ## Description: 
 
-This contains dense voxels data storage (every single cell holds data, there is no sparse optimization of space). Works like a normal 3D grid containing a voxel value in each cell. Organized in channels of configurable bit depth. Values can be interpreted either as unsigned integers or normalized floats. See enum Depth for more information.
+This contains dense voxels data storage (every single cell holds data, there is no sparse optimization of space). Works like a normal 3D grid containing a voxel value in each cell. Organized in channels of configurable bit depth. Values can be interpreted either as unsigned integers or normalized floats. See [VoxelBuffer.Depth](VoxelBuffer.md#enumerations) for more information.
 
 Arbitrary metadata can also be stored, either for the whole buffer, or per-voxel, at higher cost. This metadata can get saved and loaded along voxels, however you must make sure the data is serializable (i.e it should not contain nodes or arbitrary objects).
 
@@ -54,15 +53,15 @@ Return                                                                          
 
 enum **ChannelId**: 
 
-- **CHANNEL_TYPE** = **0** --- Channel used to store voxel types. Used by [VoxelMesherBlocky].
-- **CHANNEL_SDF** = **1** --- Channel used to store SDF data (signed distance field). Used by [VoxelMesherTransvoxel] and other smooth meshers. Values should preferably be accessed as floats. Negative values are below the isosurface (inside matter), and positive values are above the surface (outside matter).
-- **CHANNEL_COLOR** = **2** --- Channel used to store color data. Used by [VoxelMesherCubes].
+- **CHANNEL_TYPE** = **0** --- Channel used to store voxel types. Used by [VoxelMesherBlocky](VoxelMesherBlocky.md).
+- **CHANNEL_SDF** = **1** --- Channel used to store SDF data (signed distance field). Used by [VoxelMesherTransvoxel](VoxelMesherTransvoxel.md) and other smooth meshers. Values should preferably be accessed as floats. Negative values are below the isosurface (inside matter), and positive values are above the surface (outside matter).
+- **CHANNEL_COLOR** = **2** --- Channel used to store color data. Used by [VoxelMesherCubes](VoxelMesherCubes.md).
 - **CHANNEL_INDICES** = **3**
 - **CHANNEL_WEIGHTS** = **4**
 - **CHANNEL_DATA5** = **5** --- Free channel. Not used by the engine yet.
 - **CHANNEL_DATA6** = **6** --- Free channel. Not used by the engine yet.
 - **CHANNEL_DATA7** = **7** --- Free channel. Not used by the engine yet.
-- **MAX_CHANNELS** = **8** --- Maximum number of channels a [VoxelBuffer] can have.
+- **MAX_CHANNELS** = **8** --- Maximum number of channels a [VoxelBuffer](VoxelBuffer.md) can have.
 
 enum **Depth**: 
 
@@ -212,11 +211,11 @@ If this [VoxelBuffer](VoxelBuffer.md) is saved, this metadata will also be saved
 
 - [void](#)<span id="i_set_channel_depth"></span> **set_channel_depth**( [int](https://docs.godotengine.org/en/stable/classes/class_int.html) channel, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) depth ) 
 
-Changes the bit depth of a given channel. This controls the range of values a channel can hold. See enum VoxelBuffer.Depth for more information.
+Changes the bit depth of a given channel. This controls the range of values a channel can hold. See [VoxelBuffer.Depth](VoxelBuffer.md#enumerations) for more information.
 
 - [void](#)<span id="i_set_voxel"></span> **set_voxel**( [int](https://docs.godotengine.org/en/stable/classes/class_int.html) value, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) x, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) y, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) z, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) channel=0 ) 
 
-Sets the raw value of a voxel. If you use smooth voxels, you may prefer using method set_voxel_f.
+Sets the raw value of a voxel. If you use smooth voxels, you may prefer using [VoxelBuffer.set_voxel_f](VoxelBuffer.md#i_set_voxel_f).
 
 - [void](#)<span id="i_set_voxel_f"></span> **set_voxel_f**( [float](https://docs.godotengine.org/en/stable/classes/class_float.html) value, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) x, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) y, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) z, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) channel=0 ) 
 
@@ -231,4 +230,4 @@ If this [VoxelBuffer](VoxelBuffer.md) is saved, this metadata will also be saved
 - [void](#)<span id="i_set_voxel_v"></span> **set_voxel_v**( [int](https://docs.godotengine.org/en/stable/classes/class_int.html) value, [Vector3i](https://docs.godotengine.org/en/stable/classes/class_vector3i.html) pos, [int](https://docs.godotengine.org/en/stable/classes/class_int.html) channel=0 ) 
 
 
-_Generated on Jul 23, 2023_
+_Generated on Oct 15, 2023_

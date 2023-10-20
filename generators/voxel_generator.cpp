@@ -1,5 +1,6 @@
 #include "voxel_generator.h"
 #include "../constants/voxel_string_names.h"
+#include "../engine/generate_block_task.h"
 #include "../engine/gpu/compute_shader.h"
 #include "../engine/gpu/compute_shader_parameters.h"
 #include "../shaders/shaders.h"
@@ -13,6 +14,11 @@ VoxelGenerator::VoxelGenerator() {}
 
 VoxelGenerator::Result VoxelGenerator::generate_block(VoxelQueryData &input) {
 	return Result();
+}
+
+IThreadedTask *VoxelGenerator::create_block_task(const BlockTaskParams &params) const {
+	// Default generic task
+	return ZN_NEW(GenerateBlockTask(params));
 }
 
 int VoxelGenerator::get_used_channels_mask() const {
@@ -233,7 +239,7 @@ void VoxelGenerator::compile_shaders() {
 		MutexLock mlock(_shader_mutex);
 
 		_detail_rendering_shader = detail_render_shader;
-		_detail_rendering_shader_parameters = block_params;
+		_detail_rendering_shader_parameters = detail_params;
 
 		_block_rendering_shader = block_render_shader;
 		_block_rendering_shader_parameters = block_params;
@@ -258,6 +264,14 @@ bool VoxelGenerator::generate_broad_block(VoxelQueryData &input) {
 	// By default, generators don't support this separately and just do it inside `generate_block`.
 	// However if a generator supports GPU, it is recommended to implement it.
 	return false;
+}
+
+void VoxelGenerator::process_viewer_diff(ViewerID viewer_id, Box3i p_requested_box, Box3i p_prev_requested_box) {
+	// Optionally implemented in subclasses
+}
+
+void VoxelGenerator::clear_cache() {
+	// Optionally implemented in subclasses
 }
 
 void VoxelGenerator::_bind_methods() {

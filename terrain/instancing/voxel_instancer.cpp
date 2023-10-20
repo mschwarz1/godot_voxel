@@ -805,6 +805,8 @@ void VoxelInstancer::on_library_item_changed(int item_id, VoxelInstanceLibraryIt
 			ERR_PRINT("Unknown change");
 			break;
 	}
+
+	update_configuration_warnings();
 }
 
 void VoxelInstancer::add_layer(int layer_id, int lod_index) {
@@ -1131,6 +1133,8 @@ void VoxelInstancer::update_block_from_transforms(int block_index, Span<const Tr
 					body->set_instance_index(instance_index);
 					body->set_render_block_index(block_index);
 					body->set_data_block_position(math::floor_to_int(body_transform.origin) >> data_block_size_po2);
+					body->set_collision_layer(settings.collision_layer);
+					body->set_collision_mask(settings.collision_mask);
 
 					for (unsigned int i = 0; i < collision_shapes.size(); ++i) {
 						const VoxelInstanceLibraryMultiMeshItem::CollisionShapeInfo &shape_info = collision_shapes[i];
@@ -1138,6 +1142,10 @@ void VoxelInstancer::update_block_from_transforms(int block_index, Span<const Tr
 						cs->set_shape(shape_info.shape);
 						cs->set_transform(shape_info.transform);
 						body->add_child(cs);
+					}
+
+					for (const StringName &group_name : settings.group_names) {
+						body->add_to_group(group_name);
 					}
 
 					add_child(body);
@@ -1792,6 +1800,12 @@ void VoxelInstancer::set_mesh_lod_distance(float p_lod_distance) {
 	_mesh_lod_distance = p_lod_distance;
 }
 
+int VoxelInstancer::get_library_item_id_from_render_block_index(unsigned int render_block_index) const {
+	ERR_FAIL_INDEX_V(render_block_index, _blocks.size(), -1);
+	Block &block = *_blocks[render_block_index];
+	return block.layer_id;
+}
+
 int VoxelInstancer::debug_get_block_count() const {
 	return _blocks.size();
 }
@@ -1969,10 +1983,13 @@ void VoxelInstancer::get_configuration_warnings(PackedStringArray &warnings) con
 								.format(varray(VoxelInstanceLibrary::get_class_static())));
 	} else if (_library->get_item_count() == 0) {
 		warnings.append(ZN_TTR("The assigned library is empty. Add items to it so they can be spawned."));
+
+	} else {
+		get_resource_configuration_warnings(**_library, warnings, []() { return "library: "; });
 	}
 }
 
-#endif
+#endif // TOOLS_ENABLED
 
 void VoxelInstancer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_library", "library"), &VoxelInstancer::set_library);

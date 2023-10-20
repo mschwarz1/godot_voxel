@@ -1153,7 +1153,7 @@ void VoxelLodTerrain::process(float delta) {
 			VoxelEngine::get_singleton().push_async_task(task);
 
 		} else {
-			ThreadedTaskContext ctx{ 0, ThreadedTaskContext::STATUS_COMPLETE };
+			ThreadedTaskContext ctx{ 0, ThreadedTaskContext::STATUS_COMPLETE, TaskPriority() };
 			task->run(ctx);
 			memdelete(task);
 			apply_main_thread_update_tasks();
@@ -2129,8 +2129,14 @@ void VoxelLodTerrain::set_voxel_bounds(Box3i p_box) {
 	_update_data->wait_for_end_of_task();
 	Box3i bounds_in_voxels =
 			p_box.clipped(Box3i::from_center_extents(Vector3i(), Vector3iUtil::create(constants::MAX_VOLUME_EXTENT)));
-	// Round to octree size
+
 	const int octree_size = get_mesh_block_size() << (get_lod_count() - 1);
+
+	// Clamp smallest size
+	// TODO If mesh block size is set AFTER bounds, this will break when small bounds are used...
+	bounds_in_voxels.size = math::max(bounds_in_voxels.size, Vector3iUtil::create(octree_size));
+
+	// Round to octree size
 	bounds_in_voxels = bounds_in_voxels.snapped(octree_size);
 	// Can't have a smaller region than one octree
 	for (unsigned i = 0; i < Vector3iUtil::AXIS_COUNT; ++i) {
@@ -2140,6 +2146,8 @@ void VoxelLodTerrain::set_voxel_bounds(Box3i p_box) {
 	}
 	_data->set_bounds(bounds_in_voxels);
 	_update_data->state.force_update_octrees_next_update = true;
+
+	update_configuration_warnings();
 }
 
 void VoxelLodTerrain::set_collision_update_delay(int delay_msec) {
@@ -2253,6 +2261,12 @@ void VoxelLodTerrain::get_configuration_warnings(PackedStringArray &warnings) co
 		return;
 	}
 
+	Ref<VoxelGenerator> generator = get_generator();
+	if (generator.is_valid() && !generator->supports_lod()) {
+		warnings.append(
+				ZN_TTR("The assigned {0} does not support LOD.").format(varray(VoxelGenerator::get_class_static())));
+	}
+
 	Ref<VoxelMesher> mesher = get_mesher();
 
 	// Material
@@ -2262,7 +2276,6 @@ void VoxelLodTerrain::get_configuration_warnings(PackedStringArray &warnings) co
 	}
 
 	if (get_generator_use_gpu()) {
-		Ref<VoxelGenerator> generator = get_generator();
 		if (generator.is_valid() && !generator->supports_shaders()) {
 			warnings.append(String("`use_gpu_generation` is enabled, but {0} does not support running on the GPU.")
 									.format(varray(generator->get_class())));
@@ -2319,7 +2332,6 @@ void VoxelLodTerrain::get_configuration_warnings(PackedStringArray &warnings) co
 		}
 
 		// Detail textures
-		Ref<VoxelGenerator> generator = get_generator();
 		if (generator.is_valid()) {
 			if (get_generator_use_gpu() && !generator->supports_shaders()) {
 				warnings.append(ZN_TTR("The option to use GPU when generating voxels is enabled, but the current "
@@ -2370,6 +2382,10 @@ void VoxelLodTerrain::get_configuration_warnings(PackedStringArray &warnings) co
 				}
 			}
 		}
+	}
+
+	if (get_voxel_bounds().is_empty()) {
+		warnings.append(String("Terrain bounds have an empty size."));
 	}
 }
 
@@ -2698,7 +2714,9 @@ void VoxelLodTerrain::update_gizmos() {
 		const int data_block_size = get_data_block_size() << _edited_blocks_gizmos_lod_index;
 		const Basis basis(Basis().scaled(Vector3(data_block_size, data_block_size, data_block_size)));
 
-		_data->for_each_block_at_lod(
+		// Note, if this causes too much contention somehow, we could get away with not locking spatial lock, dirty
+		// reads of block flags should not hurt since they are only drawn every frame for debugging
+		_data->for_each_block_at_lod_r(
 				[&dr, parent_transform, data_block_size, basis](const Vector3i &bpos, const VoxelDataBlock &block) {
 					if (block.is_edited()) {
 						const Transform3D local_transform(basis, bpos * data_block_size);

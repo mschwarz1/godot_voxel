@@ -33,6 +33,17 @@ void print_error(const char *error, const FwdConstStdString &msg, const char *fu
 
 void flush_stdout();
 
+// When defined, redirects `println` to a file instead of standard output.
+// #define ZN_DEBUG_LOG_FILE_ENABLED
+
+#ifdef ZN_DEBUG_LOG_FILE_ENABLED
+
+void open_log_file();
+void close_log_file();
+void flush_log_file();
+
+#endif
+
 } // namespace zylann
 
 #endif // ZYLANN_LOG_H
