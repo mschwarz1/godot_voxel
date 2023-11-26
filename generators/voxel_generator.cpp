@@ -1,12 +1,12 @@
 #include "voxel_generator.h"
 #include "../constants/voxel_string_names.h"
-#include "../engine/generate_block_task.h"
 #include "../engine/gpu/compute_shader.h"
 #include "../engine/gpu/compute_shader_parameters.h"
 #include "../shaders/shaders.h"
 #include "../storage/voxel_buffer_gd.h"
 #include "../util/godot/core/array.h" // for `varray` in GDExtension builds
 #include "../util/profiling.h"
+#include "generate_block_task.h"
 
 namespace zylann::voxel {
 
@@ -28,7 +28,7 @@ int VoxelGenerator::get_used_channels_mask() const {
 VoxelSingleValue VoxelGenerator::generate_single(Vector3i pos, unsigned int channel) {
 	VoxelSingleValue v;
 	v.i = 0;
-	ZN_ASSERT_RETURN_V(channel >= 0 && channel < VoxelBufferInternal::MAX_CHANNELS, v);
+	ZN_ASSERT_RETURN_V(channel < VoxelBufferInternal::MAX_CHANNELS, v);
 	// Default slow implementation
 	// TODO Optimize: a small part of the slowness is caused by the allocator.
 	// It is not a good use of `VoxelMemoryPool` for such a small size called so often.

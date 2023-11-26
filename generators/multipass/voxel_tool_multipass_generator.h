@@ -24,6 +24,8 @@ public:
 
 	bool is_area_editable(const Box3i &box) const override;
 
+	void do_path(Span<const Vector3> positions, Span<const float> radii) override;
+
 	// TODO Implement more methods
 
 	// Specific methods

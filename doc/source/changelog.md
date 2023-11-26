@@ -19,10 +19,12 @@ Semver is not yet in place, so each version can have breaking changes, although 
     - Started an experimental type system for the blocky voxels workflow. However it is not fully functional, its API may change in the future or have parts removed.
     - Added experimental `VoxelAStarGrid3D` for grid-based pathfinding on blocky voxels 
     - Added experimental `VoxelGeneratorMultipassCB` to implement column-based generation in multiple passes that works across chunks
+    - Added `render_layers_mask` property to `VoxelTerrain` and `VoxelLodTerrain`
     - Voxel engine processing no longer stops when the SceneTree is paused
     - `VoxelGeneratorGraph`:
         - Added `Spots2D` and `Spots3D` nodes, optimized for generating "ore patches"
         - Added shader support for `FastNoiseGradient2D` and `FastNoiseGradient3D` nodes
+        - Added bilinear filter option to the `Image` node
         - Editor: reworked context menu to add nodes, similar to VisualShader. Now has search bar, tree view and node descriptions.
         - Editor: added copy/paste with Ctrl+C/Ctrl+V shortcuts
     - `VoxelGraphFunction`:
@@ -50,6 +52,9 @@ Semver is not yet in place, so each version can have breaking changes, although 
         - Added `get_all_item_ids()` to allow iterating over all items of a library
     - `VoxelLibraryMultiMeshItem `:
         - Added `render_layer` property (thanks to m4nu3lf)
+        - Added `gi_mode` property
+        - Exposed custom distance ratios for the secondary distance-based LOD system
+        - Added option to hide instances when beyond their max distance-based LOD (only relevant for terrains with no LOD, or on the last LOD of `VoxelLodTerrain`)
         - Node groups on the template scene are now added to instance colliders if present
     - `VoxelLodTerrain`:
         - Added debug drawing for modifier bounds
@@ -72,12 +77,14 @@ Semver is not yet in place, so each version can have breaking changes, although 
         - Fixed graph not always saving when saving the scene
         - Fixed shader generator crash when a node has an unconnected input
         - Fixed cellular noise when used on GPU
+        - Fixed Image node issues when sampling at negative coordinates
     - `VoxelGraphFunction`:
         - Fixed default input values were not properly loaded
         - Fixed unexpected "missing node" error when more than one custom inputs are used
     - `VoxelInstancer`:
         - Fixed crash when hiding the node in the editor
         - Fixed crash when closing the scene while an instancer node is selected
+        - Fixed instances were not cleared when using the "Re-generate" menu in the editor when terrain shape changed
     - `VoxelInstanceLibrary`: 
         - Fixed `find_item_by_name` was not finding items
         - Fixed newly added items in the editor rendering badly by default when the terrain doesn't have LOD. For now they always default to LOD 0 instead of LOD 2.
@@ -96,6 +103,8 @@ Semver is not yet in place, so each version can have breaking changes, although 
         - Changed the list of models to be handled by a typed array instead of individual properties. When opened in the editor, old resources will get converted. Re-save them to make the conversion persist.
     - `VoxelBlockyModel`:
         - The class was split into several subclasses for each type of geometry. When opened in the editor, old resources will get converted, but only if they are part of a `VoxelBlockyLibaray`. They won't work if they are individual resource files.
+    - `VoxelNode`:
+        - Removed `GIMode` enum, replaced with `GeometryInstance3D.GIMode`
 
 
 1.0 - 12/03/2023 - `godot4.0`

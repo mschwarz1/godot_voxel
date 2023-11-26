@@ -20,7 +20,7 @@ using namespace godot;
 
 #include "../macros.h"
 
-#include "../../span.h"
+#include "../../containers/span.h"
 
 namespace zylann {
 
@@ -68,6 +68,10 @@ inline Error parse_utf8(String &s, Span<const char> utf8) {
 	// The Godot API doesn't return anything, impossible to tell if parsing succeeded.
 	return OK;
 #endif
+}
+
+inline String ptr2s(const void *p) {
+	return String::num_uint64((uint64_t)p, 16);
 }
 
 } // namespace zylann

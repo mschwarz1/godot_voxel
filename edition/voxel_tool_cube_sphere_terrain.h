@@ -44,7 +44,7 @@ public:
 
 	void for_each_voxel_metadata_in_area(AABB voxel_area, const Callable &callback);
 
-	void do_path(PackedVector3Array p_positions, PackedFloat32Array p_radii);
+	void do_path(Span<const Vector3> positions, Span<const float> radii) override;
 
 protected:
 	uint64_t _get_voxel(Vector3i pos) const override;

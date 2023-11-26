@@ -27,8 +27,7 @@
 #include "../../util/godot/core/input_enums.h"
 #include "../../util/godot/core/mouse_button.h"
 #include "../../util/godot/editor_scale.h"
-#include "../../util/godot/funcs.h"
-#include "../../util/log.h"
+#include "../../util/io/log.h"
 #include "../../util/macros.h"
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
@@ -164,8 +163,8 @@ VoxelGraphEditor::VoxelGraphEditor() {
 	_graph_edit->connect("gui_input", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_gui_input));
 	_graph_edit->connect(
 			"connection_request", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_connection_request));
-	_graph_edit->connect(GODOT_GraphEdit_delete_nodes_request,
-			ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_delete_nodes_request));
+	_graph_edit->connect(
+			"delete_nodes_request", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_delete_nodes_request));
 	_graph_edit->connect("disconnection_request",
 			ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_disconnection_request));
 	_graph_edit->connect("node_selected", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_edit_node_selected));
@@ -398,15 +397,9 @@ void VoxelGraphEditor::create_node_gui(uint32_t node_id) {
 	VoxelGraphEditorNode *node_view = VoxelGraphEditorNode::create(**_graph, node_id);
 	node_view->set_name(ui_node_name);
 
-#if defined(ZN_GODOT)
 	node_view->connect("dragged", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_graph_node_dragged).bind(node_id));
 	node_view->connect(
 			"resize_request", ZN_GODOT_CALLABLE_MP(this, VoxelGraphEditor, _on_node_resize_request).bind(node_id));
-#elif defined(ZN_GODOT_EXTENSION)
-	// TODO GDX: `Callable::bind()` isn't implemented in GodotCpp
-	ZN_PRINT_ERROR("`Callable::bind()` isn't working in GodotCpp! Can't handle dragging and resizing nodes action with "
-				   "UndoRedo.");
-#endif
 
 	VoxelGraphEditorNodePreview *preview = node_view->get_preview();
 	if (preview != nullptr) {

@@ -2,16 +2,16 @@
 #include "../../constants/voxel_constants.h"
 #include "../../constants/voxel_string_names.h"
 #include "../../edition/voxel_tool_terrain.h"
-#include "../../engine/generate_block_task.h"
-#include "../../engine/load_block_data_task.h"
-#include "../../engine/mesh_block_task.h"
-#include "../../engine/save_block_data_task.h"
 #include "../../engine/voxel_engine.h"
 #include "../../engine/voxel_engine_updater.h"
+#include "../../generators/generate_block_task.h"
 #include "../../meshers/blocky/voxel_mesher_blocky.h"
+#include "../../meshers/mesh_block_task.h"
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../storage/voxel_data.h"
-#include "../../util/container_funcs.h"
+#include "../../streams/load_block_data_task.h"
+#include "../../streams/save_block_data_task.h"
+#include "../../util/containers/container_funcs.h"
 #include "../../util/godot/classes/base_material_3d.h" // For property hint in release mode in GDExtension...
 #include "../../util/godot/classes/concave_polygon_shape_3d.h"
 #include "../../util/godot/classes/engine.h"
@@ -228,24 +228,8 @@ void VoxelTerrain::set_mesh_block_size(unsigned int mesh_block_size) {
 
 	_mesh_block_size_po2 = po2;
 
-	if (_instancer != nullptr) {
-		VoxelInstancer &instancer = *_instancer;
-		_mesh_map.for_each_block([&instancer, this](VoxelMeshBlockVT &block) { //
-			instancer.on_mesh_block_exit(block.position, 0);
-			if (block.is_loaded) {
-				emit_mesh_block_exited(block.position);
-			}
-		});
-	} else {
-		_mesh_map.for_each_block([this](VoxelMeshBlockVT &block) { //
-			if (block.is_loaded) {
-				emit_mesh_block_exited(block.position);
-			}
-		});
-	}
-
 	// Unload all mesh blocks regardless of refcount
-	_mesh_map.clear();
+	clear_mesh_map();
 
 	// Make paired viewers re-view the new meshable area
 	for (unsigned int i = 0; i < _paired_viewers.size(); ++i) {
@@ -288,9 +272,9 @@ void VoxelTerrain::_on_stream_params_changed() {
 }
 
 void VoxelTerrain::_on_gi_mode_changed() {
-	const GIMode gi_mode = get_gi_mode();
+	const GeometryInstance3D::GIMode gi_mode = get_gi_mode();
 	_mesh_map.for_each_block([gi_mode](VoxelMeshBlockVT &block) { //
-		block.set_gi_mode(DirectMeshInstance::GIMode(gi_mode));
+		block.set_gi_mode(gi_mode);
 	});
 }
 
@@ -298,6 +282,13 @@ void VoxelTerrain::_on_shadow_casting_changed() {
 	const RenderingServer::ShadowCastingSetting mode = RenderingServer::ShadowCastingSetting(get_shadow_casting());
 	_mesh_map.for_each_block([mode](VoxelMeshBlockVT &block) { //
 		block.set_shadow_casting(mode);
+	});
+}
+
+void VoxelTerrain::_on_render_layers_mask_changed() {
+	const int mask = get_render_layers_mask();
+	_mesh_map.for_each_block([mask](VoxelMeshBlockVT &block) { //
+		block.set_render_layers_mask(mask);
 	});
 }
 
@@ -374,11 +365,11 @@ float VoxelTerrain::get_collision_margin() const {
 	return _collision_margin;
 }
 
-unsigned int VoxelTerrain::get_max_view_distance() const {
+int VoxelTerrain::get_max_view_distance() const {
 	return _max_view_distance_voxels;
 }
 
-void VoxelTerrain::set_max_view_distance(unsigned int distance_in_voxels) {
+void VoxelTerrain::set_max_view_distance(int distance_in_voxels) {
 	ERR_FAIL_COND(distance_in_voxels < 0);
 	_max_view_distance_voxels = distance_in_voxels;
 
@@ -691,6 +682,26 @@ void VoxelTerrain::stop_streamer() {
 	_blocks_pending_load.clear();
 }
 
+void VoxelTerrain::clear_mesh_map() {
+	if (_instancer != nullptr) {
+		VoxelInstancer &instancer = *_instancer;
+		_mesh_map.for_each_block([&instancer, this](VoxelMeshBlockVT &block) { //
+			instancer.on_mesh_block_exit(block.position, 0);
+			if (block.is_loaded) {
+				emit_mesh_block_exited(block.position);
+			}
+		});
+	} else {
+		_mesh_map.for_each_block([this](VoxelMeshBlockVT &block) { //
+			if (block.is_loaded) {
+				emit_mesh_block_exited(block.position);
+			}
+		});
+	}
+
+	_mesh_map.clear();
+}
+
 void VoxelTerrain::reset_map() {
 	// Discard everything, to reload it all
 
@@ -699,7 +710,7 @@ void VoxelTerrain::reset_map() {
 	});
 	_data->reset_maps();
 
-	_mesh_map.clear();
+	clear_mesh_map();
 
 	_loading_blocks.clear();
 	_blocks_pending_load.clear();
@@ -1739,8 +1750,8 @@ void VoxelTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutput &ob) {
 		}
 	}
 
-	block->set_mesh(mesh, DirectMeshInstance::GIMode(get_gi_mode()),
-			RenderingServer::ShadowCastingSetting(get_shadow_casting()));
+	block->set_mesh(
+			mesh, get_gi_mode(), RenderingServer::ShadowCastingSetting(get_shadow_casting()), get_render_layers_mask());
 
 	if (_material_override.is_valid()) {
 		block->set_material_override(_material_override);

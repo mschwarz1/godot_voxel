@@ -2,17 +2,18 @@
 #include "../../constants/voxel_constants.h"
 #include "../../constants/voxel_string_names.h"
 #include "../../edition/voxel_tool_cube_sphere_terrain.h"
-#include "../../engine/generate_block_task.h"
-#include "../../engine/load_block_data_task.h"
-#include "../../engine/mesh_block_task.h"
-#include "../../engine/save_block_data_task.h"
 #include "../../engine/voxel_engine.h"
 #include "../../engine/voxel_engine_updater.h"
+#include "../../generators/generate_block_task.h"
 #include "../../meshers/blocky/voxel_mesher_blocky.h"
 #include "../../meshers/cubeSphere/voxel_mesher_cubeSphere_blocky.h"
+#include "../../meshers/mesh_block_task.h"
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../storage/voxel_data.h"
-#include "../../util/container_funcs.h"
+#include "../../streams/load_block_data_task.h"
+#include "../../streams/save_block_data_task.h"
+#include "../../util/containers/container_funcs.h"
+#include "../../util/godot/classes/base_material_3d.h" // For property hint in release mode in GDExtension...
 #include "../../util/godot/classes/concave_polygon_shape_3d.h"
 #include "../../util/godot/classes/engine.h"
 #include "../../util/godot/classes/multiplayer_api.h"
@@ -406,9 +407,9 @@ void VoxelCubeSphereTerrain::_on_stream_params_changed() {
 }
 
 void VoxelCubeSphereTerrain::_on_gi_mode_changed() {
-	const GIMode gi_mode = get_gi_mode();
+	const GeometryInstance3D::GIMode gi_mode = get_gi_mode();
 	_mesh_map.for_each_block([gi_mode](VoxelMeshBlockVT &block) { //
-		block.set_gi_mode(DirectMeshInstance::GIMode(gi_mode));
+		block.set_gi_mode(gi_mode);
 	});
 }
 
@@ -2059,8 +2060,8 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 		}
 	}
 
-	block->set_mesh(mesh, DirectMeshInstance::GIMode(get_gi_mode()),
-			RenderingServer::ShadowCastingSetting(get_shadow_casting()));
+	block->set_mesh(
+			mesh, get_gi_mode(), RenderingServer::ShadowCastingSetting(get_shadow_casting()), get_render_layers_mask());
 
 	if (_material_override.is_valid()) {
 		block->set_material_override(_material_override);

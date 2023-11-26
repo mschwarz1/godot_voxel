@@ -76,8 +76,8 @@ public:
 	void set_collision_margin(float margin);
 	float get_collision_margin() const;
 
-	unsigned int get_max_view_distance() const;
-	void set_max_view_distance(unsigned int distance_in_voxels);
+	int get_max_view_distance() const;
+	void set_max_view_distance(int distance_in_voxels);
 
 	void set_block_enter_notification_enabled(bool enable);
 	bool is_block_enter_notification_enabled() const;
@@ -185,6 +185,7 @@ protected:
 
 	void _on_gi_mode_changed() override;
 	void _on_shadow_casting_changed() override;
+	void _on_render_layers_mask_changed() override;
 
 private:
 	void process();
@@ -204,6 +205,7 @@ private:
 	void start_streamer();
 	void stop_streamer();
 	void reset_map();
+	void clear_mesh_map();
 
 	// void view_data_block(Vector3i bpos, uint32_t viewer_id, bool require_notification);
 	void view_mesh_block(Vector3i bpos, bool mesh_flag, bool collision_flag);

@@ -191,7 +191,7 @@ void VoxelToolLodTerrain::do_hemisphere(Vector3 center, float radius, Vector3 fl
 	ZN_PROFILE_SCOPE();
 	ERR_FAIL_COND(_terrain == nullptr);
 
-	ops::DoHemisphere op;
+	ops::DoShapeChunked<ops::SdfHemisphere, ops::VoxelDataGridAccess> op;
 	op.shape.center = center;
 	op.shape.radius = radius;
 	op.shape.flat_direction = flat_direction;
@@ -213,8 +213,15 @@ void VoxelToolLodTerrain::do_hemisphere(Vector3 center, float radius, Vector3 fl
 	VoxelData &data = _terrain->get_storage();
 
 	data.pre_generate_box(op.box);
-	data.get_blocks_grid(op.blocks, op.box, 0);
-	op();
+
+	VoxelDataGrid grid;
+	data.get_blocks_grid(grid, op.box, 0);
+	op.block_access.grid = &grid;
+
+	{
+		VoxelDataGrid::LockWrite wlock(grid);
+		op();
+	}
 
 	_post_edit(op.box);
 }
@@ -708,12 +715,7 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 			Timer *timer = memnew(Timer);
 			timer->set_wait_time(0.2);
 			timer->set_one_shot(true);
-#if defined(ZN_GODOT)
 			timer->connect("timeout", ZN_GODOT_CALLABLE_MP(rigid_body, RigidBody3D, set_freeze_enabled).bind(false));
-#elif defined(ZN_GODOT_EXTENSION)
-			// TODO GDX: Callable::bind() cannot be used
-			ZN_PRINT_ERROR("Callable::bind() cannot be used in GDExtension, can't apply clipping fix to RigidBody3D");
-#endif
 			// Cannot use start() here because it requires to be inside the SceneTree,
 			// and we don't know if it will be after we add to the parent.
 			timer->set_autostart(true);
