@@ -234,11 +234,12 @@ VoxelAboutWindow::VoxelAboutWindow() {
 						"lenis0012\n"
 						"ilievmark (Iliev Mark)\n"
 						"OrbitalHare\n"
-						"matthewhilton (Matthew Hilton)";
+						"matthewhilton (Matthew Hilton)\n"
+						"SummitCollie";
 	{
 		Dictionary d;
 		// TODO Take version from somewhere unique
-		d["version"] = "1.x DEV";
+		d["version"] = "1.1";
 		about_text = about_text.format(d);
 	}
 	RichTextLabel *rich_text_label = memnew(RichTextLabel);
