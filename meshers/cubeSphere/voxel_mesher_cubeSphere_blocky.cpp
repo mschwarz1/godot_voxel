@@ -307,7 +307,7 @@ void generate_blocky_mesh(std::vector<VoxelMesherCubeSphereBlocky::Arrays> &out_
 							arrays.positions.resize(arrays.positions.size() + vertex_count);
 							Vector3f *w = arrays.positions.data() + append_index;
 							for (unsigned int i = 0; i < vertex_count; ++i) {
-							Vector3d vertPos = CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes) -	offset;
+								Vector3d vertPos = CalculateVertPosition(side_positions[i], pos, origin, curveRes, heightRes) -	offset;
 								w[i] = Vector3f(vertPos.x, vertPos.y, vertPos.z);
 								sideVertPositions.push_back(w[i]);
 							}

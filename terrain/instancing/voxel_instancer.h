@@ -134,7 +134,7 @@ private:
 
 	void add_layer(int layer_id, int lod_index);
 	void remove_layer(int layer_id);
-	unsigned int create_block(Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances, VoxelCubeSphereTerrain* cubeSphere);
+	unsigned int create_block(Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances, bool cube_sphere, int radius);
 	void remove_block(unsigned int block_index);
 	void set_world(World3D *world);
 	void clear_blocks();

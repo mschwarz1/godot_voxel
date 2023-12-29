@@ -69,6 +69,7 @@ void ShaderMaterialPoolVLT::recycle(Ref<ShaderMaterial> material) {
 	material->set_shader_parameter(sn.u_voxel_virtual_texture_offset_scale, Vector4(0, 0, 0, 1));
 	// TODO Would be nice if we repurposed `u_transition_mask` to store extra flags.
 	// Here we exploit cell_size==0 as "there is no virtual normalmaps on this block"
+	material->set_shader_parameter(sn.u_lod_val, 0);
 	material->set_shader_parameter(sn.u_voxel_cell_size, 0.f);
 	material->set_shader_parameter(sn.u_voxel_virtual_texture_fade, 0.f);
 
@@ -88,6 +89,7 @@ static void copy_vlt_block_params(ShaderMaterial &src, ShaderMaterial &dst) {
 	copy_param(src, dst, sn.u_voxel_normalmap_atlas);
 	copy_param(src, dst, sn.u_voxel_cell_lookup);
 	copy_param(src, dst, sn.u_voxel_virtual_texture_offset_scale);
+	copy_param(src, dst, sn.u_lod_val);
 	copy_param(src, dst, sn.u_voxel_cell_size);
 	copy_param(src, dst, sn.u_voxel_virtual_texture_fade);
 	copy_param(src, dst, sn.u_transition_mask);
@@ -115,6 +117,101 @@ void VoxelLodTerrain::ApplyMeshUpdateTask::run(TimeSpreadTaskContext &ctx) {
 	}
 
 	self->apply_mesh_update(data);
+}
+
+Vector3d VoxelLodTerrain::CalculatePlayerPositionOffset(Vector3d originPosition) const {
+	double curveRes = _data->get_bounds().size.x;
+
+	/*
+	double minRadius = curveRes / 2.0;
+	Vector3d totalPosition = originPosition;
+	Vector3d relativePosition =
+			Vector3d(totalPosition.x / ((double)(curveRes)), 1.0, totalPosition.z / ((double)(curveRes)));
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+
+	Vector3d actualCubePosition =
+			Vector3d(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z * (minRadius)) -
+			originPosition;
+	 return actualCubePosition;
+	*/
+
+	Vector3d local_position = originPosition;
+
+	// convert local_position to unit cube position
+	double distance = math::length(local_position);
+	Vector3d direction = math::normalized(local_position);
+
+	// convert unit cube position to voxel position
+	Vector3d directionf = math::normalized(Vector3d(direction.x, direction.y, direction.z));
+	Vector3d fin_pos = Vector3d(-1000000, -100000000, -10000000);
+	Vector3d absDirection = Vector3d(abs(directionf.x), abs(directionf.y), abs(directionf.z));
+	// if ((absDirection.y > absDirection.x && absDirection.y > absDirection.z) && directionf.y > 0.0) {
+	if (directionf.y > 0.0) {
+		Vector3d cubified = math::cubify(directionf);
+		bool hitProb = false;
+		if (isnan(cubified.x)) {
+			cubified.x = 0.0;
+			hitProb = true;
+		}
+
+		if (isnan(cubified.z)) {
+			cubified.z = 0.0;
+			hitProb = true;
+		}
+
+		double radius = curveRes / 2.0;
+		Vector3d percentage = Vector3d((cubified.x / 2.0) + .5f, cubified.y, (cubified.z / 2.0) + .5f);
+
+		/*
+		if (percentage.x >= 1.0 || percentage.x < 0.0) {
+			percentage.x = -1000.0;
+		}
+
+		if (percentage.z >= 1.0 || percentage.z < 0.0) {
+			percentage.z = -1000.0;
+		}
+		*/
+
+		Vector3d voxelPosition = Vector3d(percentage.x * curveRes, distance - radius, percentage.z * curveRes);
+
+		if (voxelPosition.y < 0 || voxelPosition.y > 40000) {
+			voxelPosition.y = -10000000;
+		}
+
+		fin_pos = voxelPosition;
+	}
+
+	return fin_pos;
+}
+
+Vector3d VoxelLodTerrain::CalculatePositionOffset(Vector3d originPosition) const {
+	int curveRes = _data->get_bounds().size.x;
+	double minRadius = curveRes / 2.0;
+	Vector3d totalPosition = originPosition;
+	Vector3d relativePosition =
+			Vector3d(totalPosition.x / ((double)(curveRes)), 1.0, totalPosition.z / ((double)(curveRes)));
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+
+	Vector3d actualCubePosition =
+			Vector3d(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z * (minRadius)) -
+			originPosition;
+	// return actualCubePosition;
+
+	// Vector3d spherePoint = math::normalized(cubePosition); // PointOnCubeToPointOnSphere(cubePosition);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	Vector3d offset = (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
+
+	// println(format("Origin: {}, {}, {}", origin.x, origin.y, origin.z));
+	// println(format("Offset: {}, {}, {}", offset.x, offset.y, offset.z));
+
+	return offset;
+}
+
+Vector3d VoxelLodTerrain::CalculatePositionOffset(Vector3i origin) const {
+	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+	return CalculatePositionOffset(originPosition);
 }
 
 VoxelLodTerrain::VoxelLodTerrain() {
@@ -748,6 +845,42 @@ float VoxelLodTerrain::get_lod_distance() const {
 	return _update_data->settings.lod_distance;
 }
 
+void VoxelLodTerrain::set_radius(int radius) {
+	if (is_cube_sphere()) {
+		int prev_view_dist = get_view_distance();
+		set_view_distance(1);
+		set_lod_count(1);
+		set_voxel_bounds(Box3i(Vector3i(), Vector3i(radius * 2, radius * 2, radius * 2)));
+		radius = get_radius();
+		int lod_level = 1;
+		int lod_val = 16;
+		for (; lod_level < 23; lod_level++) {
+			if (lod_val >= radius / 4) {
+				break;
+			}
+			lod_val *= 2;
+		}
+
+		set_lod_count(lod_level);
+
+		Ref<VoxelMesher> mesher = get_mesher();
+
+		if (mesher.is_valid()) {
+			VoxelMesher *mesherPtr = mesher.ptr();
+			VoxelMesherTransvoxel *tmesherPtr = dynamic_cast<VoxelMesherTransvoxel *>(mesherPtr);
+			if (tmesherPtr != nullptr) {
+				tmesherPtr->set_radius(radius);
+			}
+		}
+
+		set_view_distance(radius * 4);
+	}
+}
+
+int VoxelLodTerrain::get_radius() const {
+	return get_voxel_bounds().size.x / 2;
+}
+
 void VoxelLodTerrain::set_lod_count(int p_lod_count) {
 	ERR_FAIL_COND(p_lod_count >= (int)constants::MAX_LOD);
 	ERR_FAIL_COND(p_lod_count < 1);
@@ -1082,6 +1215,15 @@ Vector3 VoxelLodTerrain::get_local_viewer_pos() const {
 
 	const Transform3D world_to_local = get_global_transform().affine_inverse();
 	pos = world_to_local.xform(pos);
+
+	if (_cube_sphere) {
+		Vector3d posd = Vector3d(pos.x, pos.y, pos.z);
+		Vector3d cube_pos = CalculatePlayerPositionOffset(posd);
+		pos.x = cube_pos.x;
+		pos.y = cube_pos.y;
+		pos.z = cube_pos.z;
+	}
+
 	return pos;
 }
 
@@ -1171,6 +1313,22 @@ void VoxelLodTerrain::process(float delta) {
 	process_fading_blocks(delta);
 }
 
+Vector3 GetBlockCenter(Transform3D volume_transform, VoxelMeshBlockVLT *block, int mesh_block_size, bool cube_sphere, int radius) {
+	if (!cube_sphere) {
+		Vector3 blockCenter = volume_transform.xform(
+				to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
+		return blockCenter;
+	} else {
+		Vector3 blockCenterNoTrans = to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2));
+
+		blockCenterNoTrans.x += (block->offset.x - radius);
+		blockCenterNoTrans.y += (block->offset.y - radius);
+		blockCenterNoTrans.z += (block->offset.z - radius);
+		Vector3 blockCenter = volume_transform.xform(blockCenterNoTrans);
+		return blockCenter;
+	}
+}
+
 void VoxelLodTerrain::apply_main_thread_update_tasks() {
 	ZN_PROFILE_SCOPE();
 	// Dequeue outputs of the threadable part of the update for actions taking place on the main thread
@@ -1202,8 +1360,7 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 			// ERR_CONTINUE(block == nullptr);
 			bool with_fading = false;
 			if (_lod_fade_duration > 0.f) {
-				const Vector3 block_center = volume_transform.xform(
-						to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
+				const Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 				// Don't start fading on blocks behind the camera
 				with_fading = camera.forward.dot(block_center - camera.position) > 0.0;
 			}
@@ -1221,8 +1378,7 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 			// ERR_CONTINUE(block == nullptr);
 			bool with_fading = false;
 			if (_lod_fade_duration > 0.f) {
-				const Vector3 block_center = volume_transform.xform(
-						to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
+				Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 				// Don't start fading on blocks behind the camera
 				with_fading = camera.forward.dot(block_center - camera.position) > 0.0;
 			}
@@ -1282,14 +1438,16 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 						activated_blocks.find(block) == activated_blocks.end() &&
 						tu.transition_mask != block->get_transition_mask()) {
 					//
-					const Vector3 block_center = volume_transform.xform(
-							to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
+					const Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 
 					// Don't do fading for blocks behind the camera.
 					if (camera.forward.dot(block_center - camera.position) > 0.f) {
 						FadingOutMesh item;
 
-						item.local_position = block->position * mesh_block_size;
+						Vector3 _position_in_voxels = block->position * mesh_block_size;
+						Vector3d offset = block->offset;
+						item.local_position = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+
 						item.progress = 1.f;
 
 						// Wayyyy too slow, because of https://github.com/godotengine/godot/issues/34741
@@ -1550,7 +1708,12 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 		if (_instancer != nullptr && ob.surfaces.surfaces.size() > 0) {
 			// TODO The mesh could come from an edited region!
 			// We would have to know if specific voxels got edited, or different from the generator
-			_instancer->on_mesh_block_enter(ob.position, Vector3d(), ob.lod, ob.surfaces.surfaces[0].arrays);
+			Vector3d offset = Vector3d();
+			if (_cube_sphere)
+			{
+				offset = CalculatePositionOffset(ob.position * (get_mesh_block_size() << (ob.lod)));
+			}
+			_instancer->on_mesh_block_enter(ob.position, offset, ob.lod, ob.surfaces.surfaces[0].arrays);
 		}
 
 		// Lazy initialization
@@ -1558,6 +1721,9 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 		// print_line(String("Adding block {0} at lod {1}").format(varray(eo.block_position.to_vec3(), eo.lod)));
 		// set_mesh_block_active(*block, false);
 		block->set_parent_visible(is_visible());
+		if (_cube_sphere) {
+			block->offset = CalculatePositionOffset(ob.position * (get_mesh_block_size() << (ob.lod)));
+		}
 		block->set_world(get_world_3d());
 
 		if (_shader_material_pool.get_template().is_valid() && block->get_shader_material().is_null()) {
@@ -1681,6 +1847,7 @@ static void try_apply_parent_virtual_texture_to_block(VoxelMeshBlockVLT &block, 
 	material.set_shader_parameter(sn.u_voxel_cell_lookup, cell_lookup_texture);
 
 	const int cell_size = 1 << block.lod_index;
+	material.set_shader_parameter(sn.u_lod_val, block.lod_index);
 	material.set_shader_parameter(sn.u_voxel_cell_size, cell_size);
 
 	material.set_shader_parameter(sn.u_voxel_block_size, mesh_block_size);
@@ -1751,6 +1918,7 @@ void VoxelLodTerrain::apply_detail_texture_update_to_block(
 		material->set_shader_parameter(sn.u_voxel_normalmap_atlas, normalmap_textures.atlas);
 		material->set_shader_parameter(sn.u_voxel_cell_lookup, normalmap_textures.lookup);
 		const int cell_size = 1 << lod_index;
+		material->set_shader_parameter(sn.u_lod_val, lod_index);
 		material->set_shader_parameter(sn.u_voxel_cell_size, cell_size);
 		material->set_shader_parameter(sn.u_voxel_block_size, get_mesh_block_size());
 		material->set_shader_parameter(sn.u_voxel_virtual_texture_offset_scale, Vector4(0, 0, 0, 1));
@@ -2897,6 +3065,14 @@ bool VoxelLodTerrain::_b_is_area_meshed(AABB aabb, int lod_index) const {
 	return is_area_meshed(Box3i(aabb.position, aabb.size), lod_index);
 }
 
+void VoxelLodTerrain::set_cube_sphere(bool enable) {
+	_cube_sphere = enable;
+}
+
+bool VoxelLodTerrain::is_cube_sphere() const {
+	return _cube_sphere;
+}
+
 void VoxelLodTerrain::_bind_methods() {
 	// Material
 
@@ -2907,6 +3083,9 @@ void VoxelLodTerrain::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_view_distance", "distance_in_voxels"), &VoxelLodTerrain::set_view_distance);
 	ClassDB::bind_method(D_METHOD("get_view_distance"), &VoxelLodTerrain::get_view_distance);
+
+	ClassDB::bind_method(D_METHOD("set_radius", "radius"), &VoxelLodTerrain::set_radius);
+	ClassDB::bind_method(D_METHOD("get_radius"), &VoxelLodTerrain::get_radius);
 
 	ClassDB::bind_method(D_METHOD("set_voxel_bounds"), &VoxelLodTerrain::_b_set_voxel_bounds);
 	ClassDB::bind_method(D_METHOD("get_voxel_bounds"), &VoxelLodTerrain::_b_get_voxel_bounds);
@@ -3044,6 +3223,9 @@ void VoxelLodTerrain::_bind_methods() {
 			D_METHOD("debug_set_draw_flag", "flag_index", "enabled"), &VoxelLodTerrain::debug_set_draw_flag);
 	ClassDB::bind_method(D_METHOD("debug_get_draw_flag", "flag_index"), &VoxelLodTerrain::debug_get_draw_flag);
 
+	ClassDB::bind_method(D_METHOD("set_cube_sphere", "enabled"), &VoxelLodTerrain::set_cube_sphere);
+	ClassDB::bind_method(D_METHOD("is_cube_sphere"), &VoxelLodTerrain::is_cube_sphere);
+
 	// ClassDB::bind_method(D_METHOD("_on_stream_params_changed"), &VoxelLodTerrain::_on_stream_params_changed);
 
 	BIND_ENUM_CONSTANT(PROCESS_CALLBACK_IDLE);
@@ -3063,6 +3245,8 @@ void VoxelLodTerrain::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "view_distance"), "set_view_distance", "get_view_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::AABB, "voxel_bounds"), "set_voxel_bounds", "get_voxel_bounds");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cube_sphere"), "set_cube_sphere", "is_cube_sphere");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "radius"), "set_radius", "get_radius");
 
 	ADD_GROUP("Level of detail", "");
 

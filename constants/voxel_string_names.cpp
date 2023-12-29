@@ -46,6 +46,7 @@ VoxelStringNames::VoxelStringNames() {
 	u_transition_mask = StringName("u_transition_mask");
 	u_block_local_transform = StringName("u_block_local_transform");
 	u_lod_fade = StringName("u_lod_fade");
+	u_lod_val = StringName("u_lod_val");
 
 	voxel_normalmap_atlas = StringName("voxel_normalmap_atlas");
 	voxel_normalmap_lookup = StringName("voxel_normalmap_lookup");

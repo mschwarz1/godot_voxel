@@ -173,6 +173,10 @@ inline Vector3d cubify(const Vector3d& position)
 	return finalPosition;
 }
 
+inline double length(const Vector3d &v)
+{
+    return Math::sqrt(length_squared(v));
+}
 
 inline Vector3d cross(const Vector3d &v1, const Vector3d &v2)
 {
@@ -188,6 +192,7 @@ inline bool is_normalized(const Vector3d &v) {
 	// use length_squared() instead of length() to avoid sqrt(), makes it more stringent.
 	return Math::is_equal_approx(length_squared(v), 1, double(UNIT_EPSILON));
 }
+
 
 } // namespace math
 

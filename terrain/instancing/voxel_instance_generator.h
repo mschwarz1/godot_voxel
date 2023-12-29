@@ -65,7 +65,7 @@ public:
 			int layer_id, Array surface_arrays, UpMode up_mode,
 			// When generating a 2x2x2 data block area, bits in `octant_mask` tell which octant should be generated.
 			// Bits set to zero will cause all instances in the corresponding octant to not be generated.
-			uint8_t octant_mask, float block_size);
+			uint8_t octant_mask, float block_size, Vector3 block_offset);
 
 	void set_density(float d);
 	float get_density() const;

@@ -18,8 +18,10 @@ void GenerateInstancesBlockTask::run(ThreadedTaskContext &ctx) {
 	static thread_local std::vector<Transform3f> tls_generated_transforms;
 	tls_generated_transforms.clear();
 
+	Vector3 offset = Vector3(mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z);
+
 	generator->generate_transforms(tls_generated_transforms, mesh_block_grid_position, lod_index, layer_id,
-			surface_arrays, static_cast<VoxelInstanceGenerator::UpMode>(up_mode), gen_octant_mask, mesh_block_size);
+			surface_arrays, static_cast<VoxelInstanceGenerator::UpMode>(up_mode), gen_octant_mask, mesh_block_size, offset);
 
 	for (const Transform3f &t : tls_generated_transforms) {
 		transforms.push_back(t);

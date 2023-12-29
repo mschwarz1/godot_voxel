@@ -18,7 +18,8 @@ const char *DENSITY_HINT_STRING = "0.0, 1.0, 0.01";
 } // namespace
 
 void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_transforms, Vector3i grid_position,
-		int lod_index, int layer_id, Array surface_arrays, UpMode up_mode, uint8_t octant_mask, float block_size) {
+		int lod_index, int layer_id, Array surface_arrays, UpMode up_mode, uint8_t octant_mask, float block_size,
+		Vector3 block_offset) {
 	ZN_PROFILE_SCOPE();
 
 	if (surface_arrays.size() < ArrayMesh::ARRAY_VERTEX && surface_arrays.size() < ArrayMesh::ARRAY_NORMAL &&
@@ -44,7 +45,7 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 
 	const uint32_t block_pos_hash = Vector3iHasher::hash(grid_position);
 
-	Vector3f global_up(0.f, 1.f, 0.f);
+	Vector3 global_up(0.0, 1.0, 0.0);
 
 	// Using different number generators so changing parameters affecting one doesn't affect the other
 	const uint64_t seed = block_pos_hash + layer_id;
@@ -231,7 +232,7 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 
 	// Position of the block relative to the instancer node.
 	// Use full-precision here because we deal with potentially large coordinates
-	const Vector3 mesh_block_origin_d = grid_position * block_size;
+	const Vector3 mesh_block_origin_d = grid_position * block_size + block_offset;
 
 	// Don't directly access member vars because they can be modified by the editor thread (the resources themselves can
 	// get modified with relatively no harm, but the pointers can't)
@@ -413,7 +414,7 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 
 	const Vector3f fixed_look_axis = up_mode == UP_MODE_POSITIVE_Y ? Vector3f(1, 0, 0) : Vector3f(0, 1, 0);
 	const Vector3f fixed_look_axis_alternative = up_mode == UP_MODE_POSITIVE_Y ? Vector3f(0, 1, 0) : Vector3f(1, 0, 0);
-	const Vector3f mesh_block_origin = to_vec3f(grid_position * block_size);
+	// const Vector3f mesh_block_origin = to_vec3f(grid_position * block_size);
 
 	// Calculate orientations and scales
 	for (size_t vertex_index = 0; vertex_index < vertex_cache.size(); ++vertex_index) {
@@ -422,9 +423,9 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 
 		// Warning: sometimes mesh normals are not perfectly normalized.
 		// The cause is for meshing speed on CPU. It's normalized on GPU anyways.
-		Vector3f surface_normal = normal_cache[vertex_index];
+		Vector3 surface_normal = to_vec3(normal_cache[vertex_index]);
 
-		Vector3f axis_y;
+		Vector3 axis_y;
 
 		bool surface_normal_is_normalized = false;
 		bool sphere_up_is_computed = false;
@@ -438,7 +439,8 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 
 		} else {
 			if (up_mode == UP_MODE_SPHERE) {
-				global_up = math::normalized(mesh_block_origin + t.origin, sphere_distance);
+				Vector3 tOrigin = Vector3(t.origin.x, t.origin.y, t.origin.z);
+				global_up = math::normalized(mesh_block_origin_d + tOrigin, sphere_distance);
 				sphere_up_is_computed = true;
 				sphere_distance_is_computed = true;
 			}
@@ -459,7 +461,8 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 			float ny = surface_normal.y;
 			if (up_mode == UP_MODE_SPHERE) {
 				if (!sphere_up_is_computed) {
-					global_up = math::normalized(mesh_block_origin + t.origin, sphere_distance);
+					Vector3 tOrigin = Vector3(t.origin.x, t.origin.y, t.origin.z);
+					global_up = math::normalized(mesh_block_origin_d + tOrigin, sphere_distance);
 					sphere_up_is_computed = true;
 					sphere_distance_is_computed = true;
 				}
@@ -473,10 +476,11 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 		}
 
 		if (height_filter) {
-			float y = mesh_block_origin.y + t.origin.y;
+			float y = mesh_block_origin_d.y + t.origin.y;
 			if (up_mode == UP_MODE_SPHERE) {
 				if (!sphere_distance_is_computed) {
-					sphere_distance = math::length(mesh_block_origin + t.origin);
+					Vector3 tOrigin = Vector3(t.origin.x, t.origin.y, t.origin.z);
+					sphere_distance = (mesh_block_origin_d + tOrigin).length();
 					sphere_distance_is_computed = true;
 				}
 				y = sphere_distance;
@@ -487,7 +491,7 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 			}
 		}
 
-		t.origin += offset_along_normal * axis_y;
+		t.origin += to_vec3f(offset_along_normal * axis_y);
 
 		// Allows to use two faces of a single rock to create variety in the same layer
 		if (random_vertical_flip && (pcg1.rand() & 1) == 1) {
@@ -505,24 +509,24 @@ void VoxelInstanceGenerator::generate_transforms(std::vector<Transform3f> &out_t
 				// the cache?
 				dir = math::normalized(Vector3f(pcg1.randf() - 0.5f, pcg1.randf() - 0.5f, pcg1.randf() - 0.5f));
 				// TODO Any way to check if the two vectors are close to aligned without normalizing `dir`?
-			} while (Math::abs(math::dot(dir, axis_y)) > 0.9999f);
+			} while (Math::abs(math::dot(to_vec3(dir), axis_y)) > 0.9999f);
 
 		} else {
 			// If the surface is aligned with this axis, it will create a "pole" where all instances are looking at.
 			// When getting too close to it, we may pick a different axis.
 			dir = fixed_look_axis;
-			if (Math::abs(math::dot(dir, axis_y)) > 0.9999f) {
+			if (Math::abs(math::dot(to_vec3(dir), axis_y)) > 0.9999f) {
 				dir = fixed_look_axis_alternative;
 			}
 		}
 
-		const Vector3f axis_x = math::normalized(math::cross(axis_y, dir));
-		const Vector3f axis_z = math::cross(axis_x, axis_y);
+		const Vector3f axis_x = math::normalized(math::cross(to_vec3f(axis_y), dir));
+		const Vector3f axis_z = math::cross(axis_x, to_vec3f(axis_y));
 
 		// In Godot 3, the Basis constructor expected 3 rows, but in Godot 4 it was changed to take 3 columns...
 		// t.basis = Basis3f(Vector3f(axis_x.x, axis_y.x, axis_z.x), Vector3f(axis_x.y, axis_y.y, axis_z.y),
 		// 		Vector3f(axis_x.z, axis_y.z, axis_z.z));
-		t.basis = Basis3f(axis_x, axis_y, axis_z);
+		t.basis = Basis3f(axis_x, to_vec3f(axis_y), axis_z);
 
 		if (scale_range > 0.f) {
 			float r = pcg1.randf();

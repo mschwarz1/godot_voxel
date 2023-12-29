@@ -1347,23 +1347,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 						static_cast<unsigned int>(static_cast<float>(viewer.view_distance) * view_distance_scale);
 
 				const Vector3 local_position = world_to_local_transform.xform(viewer.world_position);
-				/*
-				Vector3 local_position = Vector3();
-				if (viewer.viewerRef != nullptr)
-				{
-					local_position = viewer.viewerRef->get_parent_node_3d()->get_position();
-				}
-				else
-				{
-					local_position = self.get_global_transform().affine_inverse().xform(viewer.world_position);
-				}
-				*/
-				/*
-				if (viewer.viewerRef != nullptr)
-				{
-					println(format("Local Position: {}, {}, {}", local_position.x, local_position.y, local_position.z));
-				}
-				*/
+				
 				// convert local_position to unit cube position
 				double distance = local_position.length();
 				Vector3 direction = local_position.normalized();

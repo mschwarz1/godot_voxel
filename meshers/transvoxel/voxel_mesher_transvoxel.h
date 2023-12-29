@@ -28,7 +28,7 @@ public:
 	~VoxelMesherTransvoxel();
 
 	void build(VoxelMesher::Output &output, const VoxelMesher::Input &input) override;
-	Ref<ArrayMesh> build_transition_mesh(Ref<gd::VoxelBuffer> voxels, int direction);
+	Ref<ArrayMesh> build_transition_mesh(Ref<gd::VoxelBuffer> voxels, int direction, Vector3i origin);
 
 	int get_used_channels_mask() const override;
 
@@ -48,6 +48,12 @@ public:
 
 	void set_deep_sampling_enabled(bool enable);
 	bool is_deep_sampling_enabled() const;
+
+	void set_cube_sphere(bool enable);
+	bool is_cube_sphere() const;
+
+	void set_radius(int radius);
+	int get_radius() const;
 
 	void set_transitions_enabled(bool enable);
 	bool get_transitions_enabled() const;
@@ -93,7 +99,8 @@ private:
 	// by querying the generator and edits. This can result in better quality meshes, but is also more expensive
 	// because voxel data shared between threads will have to be accessed randomly over denser data sets.
 	bool _deep_sampling_enabled = false;
-
+	bool _cube_sphere = false;
+	int _radius = 0;
 	bool _transitions_enabled = true;
 };
 

@@ -16,8 +16,8 @@
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
 #include "../../util/string_funcs.h"
-#include "../fixed_lod/voxel_terrain.h"
 #include "../fixed_cube_sphere/voxel_cube_sphere_terrain.h"
+#include "../fixed_lod/voxel_terrain.h"
 #include "../variable_lod/voxel_lod_terrain.h"
 #include "voxel_instance_component.h"
 #include "voxel_instance_library_scene_item.h"
@@ -108,8 +108,7 @@ void VoxelInstancer::clear_layers() {
 
 void VoxelInstancer::_notification(int p_what) {
 	switch (p_what) {
-		case NOTIFICATION_ENTER_WORLD:
-		{
+		case NOTIFICATION_ENTER_WORLD: {
 			set_world(*get_world_3d());
 			update_visibility();
 #ifdef TOOLS_ENABLED
@@ -118,38 +117,31 @@ void VoxelInstancer::_notification(int p_what) {
 			break;
 		}
 
-		case NOTIFICATION_EXIT_WORLD:
-		{
+		case NOTIFICATION_EXIT_WORLD: {
 			set_world(nullptr);
 #ifdef TOOLS_ENABLED
 			_debug_renderer.set_world(nullptr);
 #endif
 			break;
 		}
-		case NOTIFICATION_PARENTED: 
-		{
+		case NOTIFICATION_PARENTED: {
 			VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(get_parent());
 			VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(get_parent());
 			VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(get_parent());
 
-			if (vlt != nullptr) 
-			{
+			if (vlt != nullptr) {
 				_parent = vlt;
 				_parent_data_block_size_po2 = vlt->get_data_block_size_pow2();
 				_parent_mesh_block_size_po2 = vlt->get_mesh_block_size_pow2();
 				_mesh_lod_distance = vlt->get_lod_distance();
 				vlt->set_instancer(this);
-			}
-			else if (vt != nullptr) 
-			{
+			} else if (vt != nullptr) {
 				_parent = vt;
 				_parent_data_block_size_po2 = vt->get_data_block_size_pow2();
 				_parent_mesh_block_size_po2 = vt->get_mesh_block_size_pow2();
 				_mesh_lod_distance = vt->get_max_view_distance();
 				vt->set_instancer(this);
-			}
-			else if (vcst != nullptr)
-			{
+			} else if (vcst != nullptr) {
 				_parent = vcst;
 				_parent_data_block_size_po2 = vcst->get_data_block_size_pow2();
 				_parent_mesh_block_size_po2 = vcst->get_mesh_block_size_pow2();
@@ -158,32 +150,25 @@ void VoxelInstancer::_notification(int p_what) {
 			}
 			// TODO may want to reload all instances? Not sure if worth implementing that use case
 			break;
-		}	
+		}
 
-		case NOTIFICATION_UNPARENTED:
-		{
+		case NOTIFICATION_UNPARENTED: {
 			clear_blocks();
-			if (_parent != nullptr) 
-			{
+			if (_parent != nullptr) {
 				VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_parent);
 				VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(_parent);
 				VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(_parent);
-				
-				if (vlt != nullptr) 
-				{
+
+				if (vlt != nullptr) {
 					vlt->set_instancer(nullptr);
-				} 
-				else if (vt != nullptr) 
-				{
+				} else if (vt != nullptr) {
 					vt->set_instancer(nullptr);
-				}
-				else if (vcst != nullptr)
-				{
+				} else if (vcst != nullptr) {
 					vcst->set_instancer(nullptr);
 				}
 			}
 			_parent = nullptr;
-			
+
 			break;
 		}
 		case NOTIFICATION_TRANSFORM_CHANGED: {
@@ -282,9 +267,11 @@ void VoxelInstancer::process_generator_results() {
 
 		const VoxelInstanceLibraryItem *item = _library->get_item(output.layer_id);
 		CRASH_COND(item == nullptr);
-		Vector3 blockOffset = Vector3(output.render_block_offset.x, output.render_block_offset.y, output.render_block_offset.z);
+		Vector3 blockOffset =
+				Vector3(output.render_block_offset.x, output.render_block_offset.y, output.render_block_offset.z);
 		const int mesh_block_size = mesh_block_size_base << layer.lod_index;
-		const Transform3D block_local_transform = Transform3D(Basis(), Vector3((output.render_block_position * mesh_block_size)) + blockOffset);
+		const Transform3D block_local_transform =
+				Transform3D(Basis(), Vector3((output.render_block_position * mesh_block_size)) + blockOffset);
 		const Transform3D block_global_transform = parent_transform * block_local_transform;
 
 		auto block_it = layer.blocks.find(output.render_block_position);
@@ -654,19 +641,13 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 		std::vector<Vector3i> positions;
 		std::vector<Vector3d> offsets;
 
-		if (parent_vlt != nullptr) 
-		{
+		if (parent_vlt != nullptr) {
 			parent_vlt->get_meshed_block_positions_at_lod(layer.lod_index, positions);
-		} 
-		else if (parent_vt != nullptr) 
-		{
+		} else if (parent_vt != nullptr) {
 			parent_vt->get_meshed_block_positions(positions);
-		}
-		else if (parent_vcst != nullptr)
-		{
+		} else if (parent_vcst != nullptr) {
 			parent_vcst->get_meshed_block_positions(positions);
-			//parent_vcst->get_meshed_block_offsets(offsets);
-
+			// parent_vcst->get_meshed_block_offsets(offsets);
 		}
 
 		for (unsigned int i = 0; i < positions.size(); ++i) {
@@ -677,7 +658,19 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 				continue;
 			}
 
-			create_block(layer, layer_id, pos, false, Object::cast_to<VoxelCubeSphereTerrain>(_parent));
+			bool cube_sphere = false;
+			int radius = 0;
+			if (parent_vcst != nullptr) {
+				cube_sphere = true;
+				radius = parent_vcst->get_bounds().size.x / 2;
+			}
+
+			if (parent_vlt != nullptr) {
+				cube_sphere = parent_vlt->is_cube_sphere();
+				radius = parent_vlt->get_radius();
+			}
+
+			create_block(layer, layer_id, pos, false, cube_sphere, radius);
 		}
 	}
 
@@ -751,24 +744,23 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 		transform_cache.clear();
 
 		Array surface_arrays;
-		if (parent_vlt != nullptr) 
-		{
+		if (parent_vlt != nullptr) {
 			surface_arrays = parent_vlt->get_mesh_block_surface(block.grid_position, lod_index);
-		} 
-		else if (parent_vt != nullptr) 
-		{
+		} else if (parent_vt != nullptr) {
 			surface_arrays = parent_vt->get_mesh_block_surface(block.grid_position);
-		}
-		else if (parent_vcst != nullptr) 
-		{
+		} else if (parent_vcst != nullptr) {
 			surface_arrays = parent_vcst->get_mesh_block_surface(block.grid_position);
 		}
 
 		const int mesh_block_size = 1 << _parent_mesh_block_size_po2;
 		const int lod_block_size = mesh_block_size << lod_index;
+		Vector3 block_offset = Vector3(block.offset.x, block.offset.y, block.offset.z);
+
+		println(format("block_offset vals: {}, {}, {}", block_offset.x, block_offset.y, block_offset.z));
 
 		item->get_generator()->generate_transforms(transform_cache, block.grid_position, block.lod_index, layer_id,
-				surface_arrays, static_cast<VoxelInstanceGenerator::UpMode>(_up_mode), octant_mask, lod_block_size);
+				surface_arrays, static_cast<VoxelInstanceGenerator::UpMode>(_up_mode), octant_mask, lod_block_size,
+				block_offset);
 
 		if (render_to_data_factor == 2 && octant_mask != 0xff) {
 			// Complete transforms with edited ones
@@ -776,7 +768,6 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 			// TODO What if these blocks had loaded data which wasn't yet uploaded for render?
 			// We may setup a local transform list as well since it's expensive to get it from VisualServer
 		}
-		Vector3 block_offset = Vector3(block.offset.x, block.offset.y, block.offset.z);
 		const Transform3D block_local_transform(Basis(), Vector3(block.grid_position * lod_block_size) + block_offset);
 		const Transform3D block_transform = parent_transform * block_local_transform;
 
@@ -984,10 +975,13 @@ void VoxelInstancer::on_data_block_loaded(
 	lod.loaded_instances_data.insert(std::make_pair(grid_position, std::move(instances)));
 }
 
-void VoxelInstancer::on_mesh_block_enter(Vector3i render_grid_position, Vector3d mesh_block_offset, unsigned int lod_index, Array surface_arrays) {
+void VoxelInstancer::on_mesh_block_enter(
+		Vector3i render_grid_position, Vector3d mesh_block_offset, unsigned int lod_index, Array surface_arrays) {
 	if (lod_index >= _lods.size()) {
 		return;
 	}
+		println(format("on_mesh_block_enter: Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
+
 	create_render_blocks(render_grid_position, mesh_block_offset, lod_index, surface_arrays);
 }
 
@@ -1100,19 +1094,40 @@ VoxelInstancer::SceneInstance VoxelInstancer::create_scene_instance(const VoxelI
 	return instance;
 }
 
+Vector3d CalculatePositionOffset(int radius, Vector3i originPosition) {
+	int curveRes = radius * 2;
+	double minRadius = radius;
+	Vector3d totalPosition = Vector3d(originPosition.x, originPosition.y, originPosition.z);
+	Vector3d relativePosition =
+			Vector3d(totalPosition.x / ((double)(curveRes)), 1.0, totalPosition.z / ((double)(curveRes)));
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+
+	Vector3d actualCubePosition =
+			Vector3d(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z * (minRadius)) -
+			totalPosition;
+	// return actualCubePosition;
+
+	// Vector3d spherePoint = math::normalized(cubePosition); // PointOnCubeToPointOnSphere(cubePosition);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	Vector3d offset = (spherePoint * (minRadius + (totalPosition.y - 1.0))) - totalPosition; // + totalPosition.y);
+
+	// println(format("Origin: {}, {}, {}", origin.x, origin.y, origin.z));
+	// println(format("Offset: {}, {}, {}", offset.x, offset.y, offset.z));
+
+	return offset;
+}
+
 unsigned int VoxelInstancer::create_block(
-		Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances, VoxelCubeSphereTerrain* cubeSphere) {
+		Layer &layer, uint16_t layer_id, Vector3i grid_position, bool pending_instances, bool cube_sphere, int radius) {
 	UniquePtr<Block> block = make_unique_instance<Block>();
 	block->layer_id = layer_id;
 	block->current_mesh_lod = 0;
 	block->lod_index = layer.lod_index;
 	block->grid_position = grid_position;
-	if (cubeSphere != nullptr) 
-	{
-		block->offset = cubeSphere->CalculatePositionOffset(grid_position);
-	}
-	else 
-	{
+	if (cube_sphere) {
+		block->offset = CalculatePositionOffset(radius, grid_position);
+	} else {
 		block->offset = Vector3d();
 	}
 	block->pending_instances = pending_instances;
@@ -1131,9 +1146,25 @@ void VoxelInstancer::update_block_from_transforms(int block_index, Span<const Tr
 		World3D &world, const Transform3D &block_global_transform, Vector3 block_local_position) {
 	ZN_PROFILE_SCOPE();
 
+	VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_parent);
+	VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(_parent);
+	VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(_parent);
+
+	bool cube_sphere = false;
+	int radius = 0;
+	if (vcst != nullptr) {
+		cube_sphere = true;
+		radius = vcst->get_bounds().size.x / 2;
+	}
+
+	if (vlt != nullptr) {
+		cube_sphere = vlt->is_cube_sphere();
+		radius = vlt->get_radius();
+	}
+
 	// Get or create block
 	if (block_index == -1) {
-		block_index = create_block(layer, layer_id, grid_position, false, Object::cast_to<VoxelCubeSphereTerrain>(_parent));
+		block_index = create_block(layer, layer_id, grid_position, false, cube_sphere, radius);
 	}
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND(block_index < 0 || block_index >= static_cast<int>(_blocks.size()));
@@ -1325,12 +1356,19 @@ static const InstanceBlockData::LayerData *find_layer_data(const InstanceBlockDa
 	return nullptr;
 }
 
-void VoxelInstancer::create_render_blocks(Vector3i render_grid_position, Vector3d mesh_block_offset, int lod_index, Array surface_arrays) {
+void VoxelInstancer::create_render_blocks(
+		Vector3i render_grid_position, Vector3d mesh_block_offset, int lod_index, Array surface_arrays) {
 	ZN_PROFILE_SCOPE();
 	ERR_FAIL_COND(_library.is_null());
 
 	println(format("Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
-	println(format("render_grid_position vals: {}, {}, {}", render_grid_position.x, render_grid_position.y, render_grid_position.z));
+	println(format("render_grid_position vals: {}, {}, {}", render_grid_position.x, render_grid_position.y,
+			render_grid_position.z));
+
+	if (render_grid_position.x == 0 && render_grid_position.z == 0 && render_grid_position.y == 0)
+	{
+		println("What's the offset?");
+	}
 
 	// TODO Query one or multiple data blocks if any
 	Lod &lod = _lods[lod_index];
@@ -1344,7 +1382,10 @@ void VoxelInstancer::create_render_blocks(Vector3i render_grid_position, Vector3
 	const int mesh_block_size = mesh_block_size_base << lod_index;
 	const int data_block_size = data_block_size_base << lod_index;
 
-	const Transform3D block_local_transform = Transform3D(Basis(), Vector3((render_grid_position.x * mesh_block_size) + mesh_block_offset.x, (render_grid_position.y * mesh_block_size) + mesh_block_offset.y, (render_grid_position.z * mesh_block_size) + mesh_block_offset.z));
+	const Transform3D block_local_transform = Transform3D(Basis(),
+			Vector3((render_grid_position.x * mesh_block_size) + mesh_block_offset.x,
+					(render_grid_position.y * mesh_block_size) + mesh_block_offset.y,
+					(render_grid_position.z * mesh_block_size) + mesh_block_offset.z));
 	const Transform3D block_global_transform = parent_transform * block_local_transform;
 
 	const int render_to_data_factor = mesh_block_size_base / data_block_size_base;
@@ -1423,7 +1464,6 @@ void VoxelInstancer::create_render_blocks(Vector3i render_grid_position, Vector3
 			PackedVector3Array vertices = surface_arrays[ArrayMesh::ARRAY_VERTEX];
 
 			if (vertices.size() != 0) {
-
 				GenerateInstancesBlockTask *task = ZN_NEW(GenerateInstancesBlockTask);
 				task->mesh_block_grid_position = render_grid_position;
 				task->mesh_block_offset = mesh_block_offset;
@@ -1444,8 +1484,23 @@ void VoxelInstancer::create_render_blocks(Vector3i render_grid_position, Vector3
 		}
 
 		if (pending_generation) {
+			VoxelLodTerrain *vlt = Object::cast_to<VoxelLodTerrain>(_parent);
+			VoxelTerrain *vt = Object::cast_to<VoxelTerrain>(_parent);
+			VoxelCubeSphereTerrain *vcst = Object::cast_to<VoxelCubeSphereTerrain>(_parent);
+
+			bool cube_sphere = false;
+			int radius = 0;
+			if (vcst != nullptr) {
+				cube_sphere = true;
+				radius = vcst->get_bounds().size.x / 2;
+			}
+
+			if (vlt != nullptr) {
+				cube_sphere = vlt->is_cube_sphere();
+				radius = vlt->get_radius();
+			}
 			// Create empty block in pending state
-			create_block(layer, layer_id, render_grid_position, true, Object::cast_to<VoxelCubeSphereTerrain>(_parent));
+			create_block(layer, layer_id, render_grid_position, true, cube_sphere, radius);
 		} else {
 			// Create and populate block immediately
 			update_block_from_transforms(-1, to_span_const(transform_cache), render_grid_position, layer, *item,
@@ -1985,7 +2040,8 @@ Node *VoxelInstancer::debug_dump_as_nodes() const {
 
 			if (block.multimesh_instance.is_valid()) {
 				Vector3 block_offset = Vector3(block.offset.x, block.offset.y, block.offset.z);
-				const Transform3D block_local_transform(Basis(), Vector3(block.grid_position * lod_block_size) + block_offset);
+				const Transform3D block_local_transform(
+						Basis(), Vector3(block.grid_position * lod_block_size) + block_offset);
 
 				Ref<MultiMesh> multimesh = block.multimesh_instance.get_multimesh();
 				ERR_CONTINUE(multimesh.is_null());

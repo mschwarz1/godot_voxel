@@ -45,6 +45,10 @@ inline bool is_normalized(const Vector3 &v) {
 	return v.is_normalized();
 }
 
+inline Vector3 lerp(const Vector3 a, const Vector3 b, const real_t t) {
+	return Vector3(Math::lerp(a.x, b.x, t), Math::lerp(a.y, b.y, t), Math::lerp(a.z, b.z, t));
+}
+
 inline Vector3 lerp(const Vector3 a, const Vector3 b, const Vector3 alpha) {
 	return Vector3(Math::lerp(a.x, b.x, alpha.x), Math::lerp(a.y, b.y, alpha.y), Math::lerp(a.z, b.z, alpha.z));
 }
@@ -75,6 +79,28 @@ inline real_t dot(const Vector3 &a, const Vector3 &b) {
 
 inline real_t length_squared(const Vector3 &a) {
 	return a.length_squared();
+}
+
+inline Vector3 normalized(Vector3 v) {
+	const float lengthsq = length_squared(v);
+	if (lengthsq == 0) {
+		return Vector3();
+	} else {
+		const float length = Math::sqrt(lengthsq);
+		return v / length;
+	}
+}
+
+inline Vector3 normalized(Vector3 v, float &out_length) {
+	const float lengthsq = length_squared(v);
+	if (lengthsq == 0) {
+		out_length = 0.0;
+		return Vector3();
+	} else {
+		const float length = Math::sqrt(lengthsq);
+		out_length = length;
+		return v / length;
+	}
 }
 
 } // namespace zylann::math

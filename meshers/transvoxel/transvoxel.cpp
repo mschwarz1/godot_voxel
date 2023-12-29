@@ -3,6 +3,7 @@
 #include "../../util/godot/core/sort_array.h"
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
+#include "../../util/string_funcs.h"
 #include "transvoxel_tables.cpp"
 
 // #define VOXEL_TRANSVOXEL_REUSE_VERTEX_ON_COINCIDENT_CASES
@@ -14,6 +15,28 @@ static const float TRANSITION_CELL_SCALE = 0.25;
 // SDF values considered negative have a sign bit of 1 in this algorithm
 inline uint8_t sign_f(float v) {
 	return v < 0.f;
+}
+
+Vector3d CalculateSpherePos(Vector3d world_pos, int radius) {
+	double minRadius = radius;
+	Vector3d relativePosition = Vector3d(world_pos.x / (2.0 * minRadius), 1.0, world_pos.z / (2.0 * minRadius));
+	relativePosition.x = math::clamp(relativePosition.x, 0.0, 1.0);
+	relativePosition.z = math::clamp(relativePosition.z, 0.0, 1.0);
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	Vector3d adjustedSpherePoint =
+			((spherePoint * (minRadius + (world_pos.y - 1.0)))); // + Vector3d(minRadius, -minRadius, minRadius);
+	return adjustedSpherePoint;
+}
+
+Vector3d CalculateSpherePos(Vector3d section_pos, Vector3d offset, int radius) {
+	double minRadius = radius;
+
+	Vector3d blockOffset = CalculateSpherePos(offset, radius);
+	Vector3d world_pos = section_pos + offset;
+	Vector3d adjustedSpherePoint = CalculateSpherePos(world_pos, radius) - blockOffset;
+	return adjustedSpherePoint;
 }
 
 Vector3f get_border_offset(const Vector3f pos_scaled, const int lod_index, const Vector3i block_size_non_scaled) {
@@ -188,14 +211,12 @@ void add_type_data(std::vector<Vector2f> &uv, uint16_t type) {
 	iuv.y = 0;
 }
 
-inline uint16_t determine_weights(uint16_t assumedWeight, uint32_t a, uint32_t b, uint32_t c)
-{
+inline uint16_t determine_weights(uint16_t assumedWeight, uint32_t a, uint32_t b, uint32_t c) {
 	uint16_t weights1 = encode_weights_to_packed_u16_lossy(255, 0, 0, 0); //(uint16_t)61440; // 1111000000000000
 	uint16_t weights2 = encode_weights_to_packed_u16_lossy(0, 255, 0, 0); //(uint16_t)3840; // 0000111100000000
 	uint16_t weights3 = encode_weights_to_packed_u16_lossy(0, 0, 255, 0); //(uint16_t)240; // 0000000011110000
 
-	if (a == 0 && b == 0 && c == 0)
-	{
+	if (a == 0 && b == 0 && c == 0) {
 		return assumedWeight;
 	}
 }
@@ -220,21 +241,20 @@ void crush_type_data(Vector2f &uv, Vector2f &neighbor1UV, Vector2f &neighbor2UV)
 	if (iuv.y == 0) {
 		iuv.x = pack_u16(type1, type2);
 		iuv.y = pack_u16(type3, weights1);
-		//iuv.y = (weights1 << 16) + weights1;
+		// iuv.y = (weights1 << 16) + weights1;
 	}
 
 	if (in1uv.y == 0) {
 		in1uv.x = pack_u16(type1, type2);
 		in1uv.y = pack_u16(type3, weights2);
-		//in1uv.y = (weights2 << 16) + weights2;
+		// in1uv.y = (weights2 << 16) + weights2;
 	}
-	
+
 	if (in2uv.y == 0) {
 		in2uv.x = pack_u16(type1, type2);
 		in2uv.y = pack_u16(type3, weights3);
-		//in2uv.y = (weights3 << 16) + weights3;
+		// in2uv.y = (weights3 << 16) + weights3;
 	}
-	
 
 	// print_line(String("{0}, {1}, {2}, {3}").format(varray(weights[0], weights[1], weights[2], weights[3])));
 }
@@ -412,14 +432,14 @@ template <typename Sdf_T, typename WeightSampler_T>
 void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_data, uint64_t uniform_type_val,
 		TextureIndicesData texture_indices_data, const WeightSampler_T &weights_sampler,
 		const Vector3i block_size_with_padding, uint32_t lod_index, TexturingMode texturing_mode, Cache &cache,
-		MeshArrays &output, const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_info, Vector3d offset) {
+		MeshArrays &output, const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_info, Vector3d offset,
+		bool cube_sphere, int radius) {
 	ZN_PROFILE_SCOPE();
 
 	// This function has some comments as quotes from the Transvoxel paper.
 
 	const Vector3i block_size = block_size_with_padding - Vector3iUtil::create(MIN_PADDING + MAX_PADDING);
 	const Vector3i block_size_scaled = block_size << lod_index;
-
 
 	// Prepare vertex reuse cache
 	cache.reset_reuse_cells(block_size_with_padding);
@@ -794,7 +814,8 @@ void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_da
 					output.indices.push_back(i1);
 					output.indices.push_back(i2);
 					if (texturing_mode == TEXTURES_TYPE_PASSTHROUGH) {
-						crush_type_data(output.texturing_data[i0], output.texturing_data[i1], output.texturing_data[i2]);
+						crush_type_data(
+								output.texturing_data[i0], output.texturing_data[i1], output.texturing_data[i2]);
 					}
 					/*
 					if (texturing_mode == TEXTURES_TYPE_PASSTHROUGH)
@@ -813,7 +834,65 @@ void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_da
 			} // x
 		} // y
 	} // z
+
+	if (cube_sphere) {
+		for (int i = 0; i < output.vertices.size(); i++) {
+			Vector3d origVert = Vector3d(output.vertices[i].x, output.vertices[i].y, output.vertices[i].z);
+			Vector3d converted = CalculateSpherePos(origVert, offset, radius);
+
+			output.vertices[i].x = (float)converted.x;
+			output.vertices[i].y = (float)converted.y;
+			output.vertices[i].z = (float)converted.z;
+		}
+
+		for (int i = 0; i < output.lod_data.size(); i++) {
+			Vector3f origVertf = output.lod_data[i].secondary_position;
+			Vector3d origVert = Vector3d(origVertf.x, origVertf.y, origVertf.z);
+			Vector3d converted = CalculateSpherePos(origVert, offset, radius);
+
+			output.lod_data[i].secondary_position.x = (float)converted.x;
+			output.lod_data[i].secondary_position.y = (float)converted.y;
+			output.lod_data[i].secondary_position.z = (float)converted.z;
+		}
+	}
+	
 }
+
+// Vector3d CalculateVertOffset(Vector3i origin, int curveRes)
+// {
+// 	double minRadius = curveRes / 2.0;
+// 	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+// 	Vector3d totalPosition = originPosition;
+// 	Vector3d relativePosition = Vector3d(totalPosition.x / ((double)(curveRes)),
+// 			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
+
+// 	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+// 	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+// 	// * (minRadius)) - originPosition; return actualCubePosition;
+
+// 	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+// 	Vector3d spherePoint = math::spherify(cubePosition);
+// 	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
+// }
+
+// Vector3d CalculateVertPosition(
+// 		Vector3f sidePosition, Vector3f voxelPosition, Vector3i origin, int curveRes, int heightRes) {
+// 	double minRadius = curveRes / 2.0;
+// 	Vector3d originPosition = Vector3d(origin.x, origin.y, origin.z);
+// 	Vector3d voxPosition = Vector3d(voxelPosition.x, voxelPosition.y, voxelPosition.z);
+// 	Vector3d sidePositiond = Vector3d(sidePosition.x, sidePosition.y, sidePosition.z);
+// 	Vector3d totalPosition = sidePositiond + voxPosition + originPosition;
+// 	Vector3d relativePosition = Vector3d(totalPosition.x / ((double)(curveRes)),
+// 			1.0 /*totalPosition.y / ((float)heightRes)*/, totalPosition.z / ((double)(curveRes)));
+
+// 	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+// 	// Vector3f actualCubePosition = Vector3f(cubePosition.x * (minRadius), minRadius + totalPosition.y, cubePosition.z
+// 	// * (minRadius)) - originPosition; return actualCubePosition;
+
+// 	// Vector3f spherePoint = math::normalized(cubePosition);//PointOnCubeToPointOnSphere(cubePosition);
+// 	Vector3d spherePoint = math::spherify(cubePosition);
+// 	return (spherePoint * (minRadius + (totalPosition.y - 1.0))) - originPosition; // + totalPosition.y);
+// }
 
 //    y            y
 //    |            | z
@@ -921,7 +1000,7 @@ template <typename Sdf_T, typename WeightSampler_T>
 void build_transition_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_data, uint64_t uniform_type_val,
 		TextureIndicesData texture_indices_data, const WeightSampler_T &weights_sampler,
 		const Vector3i block_size_with_padding, int direction, int lod_index, TexturingMode texturing_mode,
-		Cache &cache, MeshArrays &output, Vector3d offset) {
+		Cache &cache, MeshArrays &output, Vector3d offset, bool cube_sphere, int radius) {
 	// From this point, we expect the buffer to contain allocated data.
 	// This function has some comments as quotes from the Transvoxel paper.
 
@@ -1340,6 +1419,27 @@ void build_transition_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type
 
 		} // for x
 	} // for y
+
+	if (cube_sphere) {
+		for (int i = 0; i < output.vertices.size(); i++) {
+			Vector3d origVert = Vector3d(output.vertices[i].x, output.vertices[i].y, output.vertices[i].z);
+			Vector3d converted = CalculateSpherePos(origVert, offset, radius);
+
+			output.vertices[i].x = (float)converted.x;
+			output.vertices[i].y = (float)converted.y;
+			output.vertices[i].z = (float)converted.z;
+		}
+
+		for (int i = 0; i < output.lod_data.size(); i++) {
+			Vector3f origVertf = output.lod_data[i].secondary_position;
+			Vector3d origVert = Vector3d(origVertf.x, origVertf.y, origVertf.z);
+			Vector3d converted = CalculateSpherePos(origVert, offset, radius);
+
+			output.lod_data[i].secondary_position.x = (float)converted.x;
+			output.lod_data[i].secondary_position.y = (float)converted.y;
+			output.lod_data[i].secondary_position.z = (float)converted.z;
+		}
+	}
 }
 
 template <typename T>
@@ -1467,7 +1567,8 @@ Span<const Sdf_T> apply_zero_sdf_fix(Span<const Sdf_T> p_sdf_data) {
 
 DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset) {
+		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset, bool cube_sphere,
+		int radius) {
 	ZN_PROFILE_SCOPE();
 	// From this point, we expect the buffer to contain allocated data in the relevant channels.
 
@@ -1523,13 +1624,15 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 		case VoxelBufferInternal::DEPTH_8_BIT: {
 			Span<const int8_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int8_t>();
 			build_regular_mesh<int8_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset,
+					cube_sphere, radius);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_16_BIT: {
 			Span<const int16_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int16_t>();
 			build_regular_mesh<int16_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset,
+					cube_sphere, radius);
 		} break;
 
 		// TODO Remove support for 32-bit SDF in Transvoxel?
@@ -1538,7 +1641,8 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 		case VoxelBufferInternal::DEPTH_32_BIT: {
 			Span<const float> sdf_data = sdf_data_raw.reinterpret_cast_to<const float>();
 			build_regular_mesh<float>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset);
+					voxels.get_size(), lod_index, texturing_mode, cache, output, deep_sdf_sampler, cell_infos, offset,
+					cube_sphere, radius);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_64_BIT:
@@ -1556,7 +1660,7 @@ DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, 
 
 void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel, int direction,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset) {
+		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset, bool cube_sphere, int radius) {
 	ZN_PROFILE_SCOPE();
 	// From this point, we expect the buffer to contain allocated data in the relevant channels.
 
@@ -1621,19 +1725,22 @@ void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_c
 		case VoxelBufferInternal::DEPTH_8_BIT: {
 			Span<const int8_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int8_t>();
 			build_transition_mesh<int8_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset, cube_sphere,
+					radius);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_16_BIT: {
 			Span<const int16_t> sdf_data = sdf_data_raw.reinterpret_cast_to<const int16_t>();
 			build_transition_mesh<int16_t>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset, cube_sphere,
+					radius);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_32_BIT: {
 			Span<const float> sdf_data = sdf_data_raw.reinterpret_cast_to<const float>();
 			build_transition_mesh<float>(sdf_data, type_data_raw, uniformType, indices_data, weights_data,
-					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset);
+					voxels.get_size(), direction, lod_index, texturing_mode, cache, output, offset, cube_sphere,
+					radius);
 		} break;
 
 		case VoxelBufferInternal::DEPTH_64_BIT:

@@ -165,11 +165,11 @@ struct CellInfo {
 
 DefaultTextureIndicesData build_regular_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset);
+		const IDeepSDFSampler *deep_sdf_sampler, std::vector<CellInfo> *cell_infos, Vector3d offset, bool cube_sphere, int radius);
 
 void build_transition_mesh(const VoxelBufferInternal &voxels, unsigned int sdf_channel, int direction,
 		uint32_t lod_index, TexturingMode texturing_mode, Cache &cache, MeshArrays &output,
-		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset);
+		DefaultTextureIndicesData default_texture_indices_data, Vector3d offset, bool cube_sphere, int radius);
 
 } // namespace zylann::voxel::transvoxel
 

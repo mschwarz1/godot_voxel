@@ -66,9 +66,7 @@ int VoxelMesherTransvoxel::get_used_channels_mask() const {
 	if (_texture_mode == TEXTURES_BLEND_4_OVER_16) {
 		return (1 << VoxelBufferInternal::CHANNEL_SDF) | (1 << VoxelBufferInternal::CHANNEL_INDICES) |
 				(1 << VoxelBufferInternal::CHANNEL_WEIGHTS);
-	}
-	else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH)
-	{
+	} else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH) {
 		return (1 << VoxelBufferInternal::CHANNEL_SDF) | (1 << VoxelBufferInternal::CHANNEL_TYPE);
 	}
 	return (1 << VoxelBufferInternal::CHANNEL_SDF);
@@ -217,9 +215,41 @@ struct DeepSampler : transvoxel::IDeepSDFSampler {
 	}
 };
 
-Vector3d CalculateVertOffset(Vector3i origin) 
-{
-	return Vector3d((double)origin.x, (double)origin.y, (double)origin.z);
+Vector3d CalculateSpherePos(Vector3d world_pos, int radius) {
+	double minRadius = radius;
+	Vector3d relativePosition = Vector3d(world_pos.x / (2.0 * minRadius), 1.0, world_pos.z / (2.0 * minRadius));
+	relativePosition.x = math::clamp(relativePosition.x, 0.0, 1.0);
+	relativePosition.z = math::clamp(relativePosition.z, 0.0, 1.0);
+
+	Vector3d cubePosition = Vector3d((relativePosition.x - .5) * 2.0, 1.0, (relativePosition.z - .5) * 2.0);
+	Vector3d spherePoint = math::spherify(cubePosition);
+	Vector3d adjustedSpherePoint =
+			((spherePoint * (minRadius + (world_pos.y - 1.0)))); // + Vector3d(minRadius, -minRadius, minRadius);
+	return adjustedSpherePoint;
+}
+
+void make_cube_sphere(transvoxel::MeshArrays &output, Vector3d offset, int radius) {
+	Vector3d blockOffset = CalculateSpherePos(offset, radius);
+	for (int i = 0; i < output.vertices.size(); i++) {
+		Vector3d origVert = Vector3d(output.vertices[i].x, output.vertices[i].y, output.vertices[i].z);
+		Vector3d world_pos = origVert + offset;
+		Vector3d converted = CalculateSpherePos(world_pos, radius) - blockOffset;
+
+		output.vertices[i].x = (float)converted.x;
+		output.vertices[i].y = (float)converted.y;
+		output.vertices[i].z = (float)converted.z;
+	}
+
+	for (int i = 0; i < output.lod_data.size(); i++) {
+		Vector3f origVertf = output.lod_data[i].secondary_position;
+		Vector3d origVert = Vector3d(origVertf.x, origVertf.y, origVertf.z);
+		Vector3d world_pos = origVert + offset;
+		Vector3d converted = CalculateSpherePos(world_pos, radius) - blockOffset;
+
+		output.lod_data[i].secondary_position.x = (float)converted.x;
+		output.lod_data[i].secondary_position.y = (float)converted.y;
+		output.lod_data[i].secondary_position.z = (float)converted.z;
+	}
 }
 
 void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher::Input &input) {
@@ -243,7 +273,13 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		// There won't be anything to polygonize since the SDF has no variations, so it can't cross the isolevel
 		return;
 	}
-	Vector3d offset = Vector3d(0,0,0);//CalculateVertOffset(input.origin_in_voxels);
+
+	Vector3d offset = Vector3d(0, 0, 0);
+	if (_cube_sphere) {
+		offset.x = input.origin_in_voxels.x;
+		offset.y = input.origin_in_voxels.y;
+		offset.z = input.origin_in_voxels.z;
+	}
 
 	// const uint64_t time_before = Time::get_singleton()->get_ticks_usec();
 
@@ -254,6 +290,8 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		cell_infos = &transvoxel::get_tls_cell_infos();
 	}
 
+	bool regCubeSphere = (!(_transitions_enabled)) && (_cube_sphere);
+
 	if (_deep_sampling_enabled && input.generator != nullptr && input.data != nullptr && input.lod_index > 0) {
 		const DeepSampler ds(*input.generator, *input.data, sdf_channel, input.origin_in_voxels);
 		// TODO Optimization: "area scope" feature on generators to optimize certain uses of `generate_single`.
@@ -261,10 +299,12 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		// `generate_single` in between, knowing they will all be done within the specified area.
 
 		default_texture_indices_data = transvoxel::build_regular_mesh(voxels, sdf_channel, input.lod_index,
-				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, &ds, cell_infos, offset);
+				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, &ds, cell_infos, offset,
+				false, _radius);
 	} else {
 		default_texture_indices_data = transvoxel::build_regular_mesh(voxels, sdf_channel, input.lod_index,
-				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, nullptr, cell_infos, offset);
+				static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, mesh_arrays, nullptr, cell_infos,
+				offset, false, _radius);
 	}
 
 	if (mesh_arrays.vertices.size() == 0) {
@@ -285,7 +325,6 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 
 	output.collision_surface.submesh_vertex_end = combined_mesh_arrays->vertices.size();
 	output.collision_surface.submesh_index_end = combined_mesh_arrays->indices.size();
-
 	if (_transitions_enabled && input.lod_hint) {
 		// We combine transition meshes with the regular mesh, because it results in less draw calls than if they were
 		// separate. This only requires a vertex shader trick to discard them when neighbors change.
@@ -296,13 +335,17 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 
 			transvoxel::build_transition_mesh(voxels, sdf_channel, dir, input.lod_index,
 					static_cast<transvoxel::TexturingMode>(_texture_mode), tls_cache, *combined_mesh_arrays,
-					default_texture_indices_data, offset);
+					default_texture_indices_data, offset, false, _radius);
 		}
+	}
+
+	if (_cube_sphere) {
+		make_cube_sphere(*combined_mesh_arrays, offset, _radius);
 	}
 
 	Array gd_arrays;
 	fill_surface_arrays(gd_arrays, *combined_mesh_arrays);
-	output.offset = offset;
+	output.offset = offset; // doesn't seem to do anything
 
 	output.surfaces.push_back({ gd_arrays, 0 });
 
@@ -316,10 +359,15 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 	if (_texture_mode == TEXTURES_BLEND_4_OVER_16) {
 		output.mesh_flags |= (RenderingServer::ARRAY_CUSTOM_RG_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT);
 	}
+	else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH)
+	{
+		output.mesh_flags |= (RenderingServer::ARRAY_CUSTOM_RG_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT);// << Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT);
+	}
 }
 
 // Only exists for testing
-Ref<ArrayMesh> VoxelMesherTransvoxel::build_transition_mesh(Ref<gd::VoxelBuffer> voxels, int direction) {
+Ref<ArrayMesh> VoxelMesherTransvoxel::build_transition_mesh(
+		Ref<gd::VoxelBuffer> voxels, int direction, Vector3i origin) {
 	static thread_local transvoxel::Cache s_cache;
 	static thread_local transvoxel::MeshArrays s_mesh_arrays;
 
@@ -331,14 +379,21 @@ Ref<ArrayMesh> VoxelMesherTransvoxel::build_transition_mesh(Ref<gd::VoxelBuffer>
 		// Uniform SDF won't produce any surface
 		return Ref<ArrayMesh>();
 	}
+	Vector3d offset = Vector3d(0, 0, 0);
+	if (_cube_sphere) {
+		offset.x = origin.x;
+		offset.y = origin.y;
+		offset.z = origin.z;
+		// offset = CalculateVertOffset(input.origin_in_voxels, _radius);
+	}
 
 	// TODO We need to output transition meshes through the generic interface, they are part of the result
 	// For now we can't support proper texture indices in this specific case
 	transvoxel::DefaultTextureIndicesData default_texture_indices_data;
 	default_texture_indices_data.use = false;
 	transvoxel::build_transition_mesh(voxels->get_buffer(), VoxelBufferInternal::CHANNEL_SDF, direction, 0,
-			static_cast<transvoxel::TexturingMode>(_texture_mode), s_cache, s_mesh_arrays,
-			default_texture_indices_data, Vector3d(0.0,0.0,0.0));
+			static_cast<transvoxel::TexturingMode>(_texture_mode), s_cache, s_mesh_arrays, default_texture_indices_data,
+			offset, _cube_sphere, _radius);
 
 	Ref<ArrayMesh> mesh;
 
@@ -396,6 +451,22 @@ bool VoxelMesherTransvoxel::is_deep_sampling_enabled() const {
 	return _deep_sampling_enabled;
 }
 
+void VoxelMesherTransvoxel::set_cube_sphere(bool enable) {
+	_cube_sphere = enable;
+}
+
+bool VoxelMesherTransvoxel::is_cube_sphere() const {
+	return _cube_sphere;
+}
+
+void VoxelMesherTransvoxel::set_radius(int radius) {
+	_radius = radius;
+}
+
+int VoxelMesherTransvoxel::get_radius() const {
+	return _radius;
+}
+
 void VoxelMesherTransvoxel::set_transitions_enabled(bool enable) {
 	_transitions_enabled = enable;
 }
@@ -434,12 +505,18 @@ void VoxelMesherTransvoxel::_bind_methods() {
 			D_METHOD("set_deep_sampling_enabled", "enabled"), &VoxelMesherTransvoxel::set_deep_sampling_enabled);
 	ClassDB::bind_method(D_METHOD("is_deep_sampling_enabled"), &VoxelMesherTransvoxel::is_deep_sampling_enabled);
 
+	ClassDB::bind_method(D_METHOD("set_cube_sphere", "enabled"), &VoxelMesherTransvoxel::set_cube_sphere);
+	ClassDB::bind_method(D_METHOD("is_cube_sphere"), &VoxelMesherTransvoxel::is_cube_sphere);
+
+	ClassDB::bind_method(D_METHOD("set_radius", "radius"), &VoxelMesherTransvoxel::set_radius);
+	ClassDB::bind_method(D_METHOD("get_radius"), &VoxelMesherTransvoxel::get_radius);
+
 	ClassDB::bind_method(
 			D_METHOD("set_transitions_enabled", "enabled"), &VoxelMesherTransvoxel::set_transitions_enabled);
 	ClassDB::bind_method(D_METHOD("get_transitions_enabled"), &VoxelMesherTransvoxel::get_transitions_enabled);
 
-	ADD_PROPERTY(
-			PropertyInfo(Variant::INT, "texturing_mode", PROPERTY_HINT_ENUM, "None,4-blend over 16 textures (4 bits), Type Passthrough"),
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "texturing_mode", PROPERTY_HINT_ENUM,
+						 "None,4-blend over 16 textures (4 bits), Type Passthrough"),
 			"set_texturing_mode", "get_texturing_mode");
 
 	ADD_GROUP("Mesh optimization", "mesh_optimization_");
@@ -452,6 +529,9 @@ void VoxelMesherTransvoxel::_bind_methods() {
 			"get_mesh_optimization_target_ratio");
 
 	ADD_GROUP("Advanced", "");
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cube_sphere"), "set_cube_sphere", "is_cube_sphere");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "radius"), "set_radius", "get_radius");
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "deep_sampling_enabled"), "set_deep_sampling_enabled",
 			"is_deep_sampling_enabled");

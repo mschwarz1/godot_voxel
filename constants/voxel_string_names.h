@@ -37,7 +37,7 @@ public:
 	StringName u_transition_mask;
 	StringName u_block_local_transform;
 	StringName u_lod_fade;
-
+	StringName u_lod_val;
 	StringName voxel_normalmap_atlas;
 	StringName voxel_normalmap_lookup;
 

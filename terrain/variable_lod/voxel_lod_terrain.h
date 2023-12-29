@@ -35,6 +35,12 @@ public:
 // VoxelStream and VoxelGenerator must support LOD.
 class VoxelLodTerrain : public VoxelNode {
 	GDCLASS(VoxelLodTerrain, VoxelNode)
+
+protected:
+	Vector3d CalculatePositionOffset(Vector3i origin) const;
+	Vector3d CalculatePositionOffset(Vector3d originPosition) const;
+	Vector3d CalculatePlayerPositionOffset(Vector3d originPosition) const;
+
 public:
 	VoxelLodTerrain();
 	~VoxelLodTerrain();
@@ -125,6 +131,12 @@ public:
 
 	void set_generator_use_gpu(bool enabled);
 	bool get_generator_use_gpu() const;
+
+	void set_cube_sphere(bool enable);
+	bool is_cube_sphere() const;
+
+	void set_radius(int radius);
+	int get_radius() const;
 
 	// These must be called after an edit
 	void post_edit_area(Box3i p_box, bool update_mesh);
@@ -259,8 +271,9 @@ protected:
 private:
 	void process(float delta);
 	void apply_main_thread_update_tasks();
-
-	void apply_mesh_update(VoxelEngine::BlockMeshOutput &ob);
+protected:
+	virtual void apply_mesh_update(VoxelEngine::BlockMeshOutput &ob);
+protected:
 	void apply_data_block_response(VoxelEngine::BlockDataOutput &ob);
 	void apply_detail_texture_update(VoxelEngine::BlockDetailTextureOutput &ob);
 	void apply_detail_texture_update_to_block(
@@ -273,8 +286,9 @@ private:
 	void stop_streamer();
 	void reset_maps();
 	void reset_mesh_maps();
-
-	Vector3 get_local_viewer_pos() const;
+protected:
+	virtual Vector3 get_local_viewer_pos() const;
+private:
 	void _set_lod_count(int p_lod_count);
 	void set_mesh_block_active(VoxelMeshBlockVLT &block, bool active, bool with_fading);
 
@@ -311,7 +325,7 @@ private:
 #ifdef TOOLS_ENABLED
 	void update_gizmos();
 #endif
-
+protected:
 	static void _bind_methods();
 
 private:
@@ -321,6 +335,7 @@ private:
 	ProcessCallback _process_callback = PROCESS_CALLBACK_IDLE;
 
 	Ref<Material> _material;
+protected:
 
 	// The main reason this pool even exists is because of this: https://github.com/godotengine/godot/issues/34741
 	// Blocks need individual shader parameters for several features,
@@ -331,9 +346,8 @@ private:
 	// The problem is, that also means every time `ShaderMaterial::duplicate()` is called, when it assigns `shader`,
 	// it has to add a connection to a HUGE list. Which is very slow, enough to cause stutters.
 	ShaderMaterialPoolVLT _shader_material_pool;
-
 	FixedArray<VoxelMeshMap<VoxelMeshBlockVLT>, constants::MAX_LOD> _mesh_maps_per_lod;
-
+private:
 	// Copies of meshes just for fading out.
 	// Used when a transition mask changes. This can make holes appear if not smoothly faded.
 	struct FadingOutMesh {
@@ -349,7 +363,7 @@ private:
 
 	// These are "fire and forget"
 	std::vector<FadingOutMesh> _fading_out_meshes;
-
+protected:
 	unsigned int _collision_lod_count = 0;
 	unsigned int _collision_layer = 1;
 	unsigned int _collision_mask = 1;
@@ -370,13 +384,15 @@ private:
 	};
 
 	std::vector<FadingDetailTexture> _fading_detail_textures;
-
+protected:
 	VoxelInstancer *_instancer = nullptr;
-
+private:
 	Ref<VoxelMesher> _mesher;
 
 	// Data stored with a shared pointer so it can be sent to asynchronous tasks
 	bool _threaded_update_enabled = false;
+
+protected:
 	std::shared_ptr<VoxelData> _data;
 	std::shared_ptr<VoxelLodTerrainUpdateData> _update_data;
 	std::shared_ptr<StreamingDependency> _streaming_dependency;
@@ -389,10 +405,13 @@ private:
 		VoxelLodTerrain *self = nullptr;
 		VoxelEngine::BlockMeshOutput data;
 	};
-
+private:
 	FixedArray<std::unordered_map<Vector3i, RefCount>, constants::MAX_LOD> _queued_main_thread_mesh_updates;
 
+	bool _cube_sphere = false;
+
 #ifdef TOOLS_ENABLED
+protected:
 	bool _debug_draw_enabled = false;
 	uint8_t _debug_draw_flags = 0;
 	uint8_t _edited_blocks_gizmos_lod_index = 0;
@@ -405,7 +424,6 @@ private:
 		uint32_t lod;
 		uint32_t remaining_frames;
 	};
-
 	std::vector<DebugMeshUpdateItem> _debug_mesh_update_items;
 
 	struct DebugEditItem {
@@ -416,8 +434,9 @@ private:
 
 	std::vector<DebugEditItem> _debug_edit_items;
 #endif
-
+protected:
 	Stats _stats;
+private:
 };
 
 } // namespace zylann::voxel

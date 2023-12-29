@@ -186,10 +186,13 @@ void VoxelMeshBlockVLT::set_shader_material(Ref<ShaderMaterial> material) {
 	}
 
 	if (_shader_material.is_valid()) {
-		const Transform3D local_transform(Basis(), _position_in_voxels);
+		Vector3 localPos = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+		const Transform3D local_transform(Basis(), localPos);
 		const VoxelStringNames &sn = VoxelStringNames::get_singleton();
 		_shader_material->set_shader_parameter(sn.u_block_local_transform, local_transform);
 		_shader_material->set_shader_parameter(sn.u_voxel_virtual_texture_offset_scale, Vector4(0, 0, 0, 1));
+		// ADD HERE
+		_shader_material->set_shader_parameter(sn.u_lod_val, lod_index);
 	}
 }
 
@@ -249,7 +252,8 @@ void VoxelMeshBlockVLT::set_parent_transform(const Transform3D &parent_transform
 
 	if (_mesh_instance.is_valid() || _static_body.is_valid()) {
 		// TODO Optimize: could be optimized due to the basis being identity
-		const Transform3D local_transform(Basis(), _position_in_voxels);
+		Vector3 localPos = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+		const Transform3D local_transform(Basis(), localPos);
 		const Transform3D world_transform = parent_transform * local_transform;
 
 		if (_mesh_instance.is_valid()) {
@@ -272,8 +276,9 @@ void VoxelMeshBlockVLT::set_parent_transform(const Transform3D &parent_transform
 void VoxelMeshBlockVLT::update_transition_mesh_transform(unsigned int side, const Transform3D &parent_transform) {
 	DirectMeshInstance &mi = _transition_mesh_instances[side];
 	if (mi.is_valid()) {
+		Vector3 localPos = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+		const Transform3D local_transform(Basis(), localPos);
 		// TODO Optimize: could be optimized due to the basis being identity
-		const Transform3D local_transform(Basis(), _position_in_voxels);
 		const Transform3D world_transform = parent_transform * local_transform;
 		mi.set_transform(world_transform);
 	}

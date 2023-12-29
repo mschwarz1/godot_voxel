@@ -20,6 +20,15 @@ public:
 	void set_blur_enabled(bool enable);
 	bool is_blur_enabled() const;
 
+	void set_mapping_enabled(bool enable);
+	bool is_mapping_enabled() const;
+
+	void set_mapping_min(Vector2 min_mapping);
+	Vector2 get_mapping_min() const;
+
+	void set_mapping_max(Vector2 max_mapping);
+	Vector2 get_mapping_max() const;
+
 	Result generate_block(VoxelGenerator::VoxelQueryData &input) override;
 
 private:
@@ -36,6 +45,9 @@ private:
 		Ref<Image> image;
 		// Mostly here as demo/tweak. It's better recommended to use an EXR/float image.
 		bool blur_enabled = false;
+		bool mapping_enabled = false;
+		Vector2 mapping_min = Vector2();
+		Vector2 mapping_max = Vector2();
 	};
 
 	Parameters _parameters;
