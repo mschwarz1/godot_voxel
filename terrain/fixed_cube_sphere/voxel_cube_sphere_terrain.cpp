@@ -2008,7 +2008,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 	}
 
 	Ref<ArrayMesh> mesh;
-	std::vector<uint8_t> material_indices;
+	std::vector<uint16_t> material_indices;
 	if (ob.has_mesh_resource) {
 		// The mesh was already built as part of the threaded task
 		mesh = ob.mesh;
