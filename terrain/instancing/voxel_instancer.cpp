@@ -756,7 +756,7 @@ void VoxelInstancer::regenerate_layer(uint16_t layer_id, bool regenerate_blocks)
 		const int lod_block_size = mesh_block_size << lod_index;
 		Vector3 block_offset = Vector3(block.offset.x, block.offset.y, block.offset.z);
 
-		println(format("block_offset vals: {}, {}, {}", block_offset.x, block_offset.y, block_offset.z));
+		//println(format("block_offset vals: {}, {}, {}", block_offset.x, block_offset.y, block_offset.z));
 
 		item->get_generator()->generate_transforms(transform_cache, block.grid_position, block.lod_index, layer_id,
 				surface_arrays, static_cast<VoxelInstanceGenerator::UpMode>(_up_mode), octant_mask, lod_block_size,
@@ -980,7 +980,7 @@ void VoxelInstancer::on_mesh_block_enter(
 	if (lod_index >= _lods.size()) {
 		return;
 	}
-		println(format("on_mesh_block_enter: Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
+	//println(format("on_mesh_block_enter: Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
 
 	create_render_blocks(render_grid_position, mesh_block_offset, lod_index, surface_arrays);
 }
@@ -1361,14 +1361,15 @@ void VoxelInstancer::create_render_blocks(
 	ZN_PROFILE_SCOPE();
 	ERR_FAIL_COND(_library.is_null());
 
-	println(format("Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
-	println(format("render_grid_position vals: {}, {}, {}", render_grid_position.x, render_grid_position.y,
-			render_grid_position.z));
+	//println(format("Offset vals: {}, {}, {}", mesh_block_offset.x, mesh_block_offset.y, mesh_block_offset.z));
+	//println(format("render_grid_position vals: {}, {}, {}", render_grid_position.x, render_grid_position.y, render_grid_position.z));
 
+	/*
 	if (render_grid_position.x == 0 && render_grid_position.z == 0 && render_grid_position.y == 0)
 	{
 		println("What's the offset?");
 	}
+	*/
 
 	// TODO Query one or multiple data blocks if any
 	Lod &lod = _lods[lod_index];

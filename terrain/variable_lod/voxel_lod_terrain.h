@@ -123,6 +123,9 @@ public:
 	void set_normalmap_generator_override(Ref<VoxelGenerator> generator_override);
 	Ref<VoxelGenerator> get_normalmap_generator_override() const;
 
+	void set_navigation_region(NavigationRegion3D* nav_region);
+	NavigationRegion3D* get_navigation_region() const;
+
 	void set_normalmap_generator_override_begin_lod_index(int lod_index);
 	int get_normalmap_generator_override_begin_lod_index() const;
 
@@ -321,6 +324,8 @@ private:
 	bool _b_is_area_meshed(AABB aabb, int lod_index) const;
 
 	Dictionary _b_get_statistics() const;
+
+	NavigationRegion3D* navigation_region;
 
 #ifdef TOOLS_ENABLED
 	void update_gizmos();

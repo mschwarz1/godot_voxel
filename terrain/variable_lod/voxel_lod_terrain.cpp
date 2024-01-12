@@ -740,6 +740,12 @@ int VoxelLodTerrain::get_view_distance() const {
 	return _update_data->settings.view_distance_voxels;
 }
 
+void VoxelLodTerrain::set_navigation_region(NavigationRegion3D *nav_region){ navigation_region = nav_region };
+
+NavigationRegion3D *VoxelLodTerrain::get_navigation_region() const {
+	return navigation_region;
+}
+
 // TODO Needs to be clamped dynamically, to avoid the user accidentally setting blowing up memory.
 // It used to be clamped to a hardcoded value, but now it may depend on LOD count and boundaries
 void VoxelLodTerrain::set_view_distance(int p_distance_in_voxels) {
@@ -1315,13 +1321,15 @@ void VoxelLodTerrain::process(float delta) {
 	process_fading_blocks(delta);
 }
 
-Vector3 GetBlockCenter(Transform3D volume_transform, VoxelMeshBlockVLT *block, int mesh_block_size, bool cube_sphere, int radius) {
+Vector3 GetBlockCenter(
+		Transform3D volume_transform, VoxelMeshBlockVLT *block, int mesh_block_size, bool cube_sphere, int radius) {
 	if (!cube_sphere) {
 		Vector3 blockCenter = volume_transform.xform(
 				to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2)));
 		return blockCenter;
 	} else {
-		Vector3 blockCenterNoTrans = to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2));
+		Vector3 blockCenterNoTrans =
+				to_vec3(block->position * mesh_block_size + Vector3iUtil::create(mesh_block_size / 2));
 
 		blockCenterNoTrans.x += (block->offset.x - radius);
 		blockCenterNoTrans.y += (block->offset.y - radius);
@@ -1362,7 +1370,8 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 			// ERR_CONTINUE(block == nullptr);
 			bool with_fading = false;
 			if (_lod_fade_duration > 0.f) {
-				const Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
+				const Vector3 block_center =
+						GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 				// Don't start fading on blocks behind the camera
 				with_fading = camera.forward.dot(block_center - camera.position) > 0.0;
 			}
@@ -1380,7 +1389,8 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 			// ERR_CONTINUE(block == nullptr);
 			bool with_fading = false;
 			if (_lod_fade_duration > 0.f) {
-				Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
+				Vector3 block_center =
+						GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 				// Don't start fading on blocks behind the camera
 				with_fading = camera.forward.dot(block_center - camera.position) > 0.0;
 			}
@@ -1440,7 +1450,8 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 						activated_blocks.find(block) == activated_blocks.end() &&
 						tu.transition_mask != block->get_transition_mask()) {
 					//
-					const Vector3 block_center = GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
+					const Vector3 block_center =
+							GetBlockCenter(volume_transform, block, mesh_block_size, _cube_sphere, get_radius());
 
 					// Don't do fading for blocks behind the camera.
 					if (camera.forward.dot(block_center - camera.position) > 0.f) {
@@ -1448,7 +1459,8 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 
 						Vector3 _position_in_voxels = block->position * mesh_block_size;
 						Vector3d offset = block->offset;
-						item.local_position = Vector3(_position_in_voxels.x + offset.x, _position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
+						item.local_position = Vector3(_position_in_voxels.x + offset.x,
+								_position_in_voxels.y + offset.y, _position_in_voxels.z + offset.z);
 
 						item.progress = 1.f;
 
@@ -1711,8 +1723,7 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 			// TODO The mesh could come from an edited region!
 			// We would have to know if specific voxels got edited, or different from the generator
 			Vector3d offset = Vector3d();
-			if (_cube_sphere)
-			{
+			if (_cube_sphere) {
 				offset = CalculatePositionOffset(ob.position * (get_mesh_block_size() << (ob.lod)));
 			}
 			_instancer->on_mesh_block_enter(ob.position, offset, ob.lod, ob.surfaces.surfaces[0].arrays);
@@ -3232,6 +3243,8 @@ void VoxelLodTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_cube_sphere", "enabled"), &VoxelLodTerrain::set_cube_sphere);
 	ClassDB::bind_method(D_METHOD("is_cube_sphere"), &VoxelLodTerrain::is_cube_sphere);
 
+	ClassDB::bind_method(D_METHOD("set_navigation_region", "nav_region"), &VoxelLodTerrain::set_navigation_region;
+	ClassDB::bind_method(D_METHOD("get_navigation_region"), &VoxelLodTerrain::get_navigation_region);
 	// ClassDB::bind_method(D_METHOD("_on_stream_params_changed"), &VoxelLodTerrain::_on_stream_params_changed);
 
 	BIND_ENUM_CONSTANT(PROCESS_CALLBACK_IDLE);
@@ -3306,6 +3319,8 @@ void VoxelLodTerrain::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "threaded_update_enabled"), "set_threaded_update_enabled",
 			"is_threaded_update_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_gpu_generation"), "set_generator_use_gpu", "get_generator_use_gpu");
+
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "navigation_region"), "set_navigation_region", "get_navigation_region");
 }
 
 } // namespace zylann::voxel

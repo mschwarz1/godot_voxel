@@ -814,7 +814,7 @@ void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_da
 					const int i0 = cell_vertex_indices[regular_cell_data.get_vertex_index(t0)];
 					const int i1 = cell_vertex_indices[regular_cell_data.get_vertex_index(t0 + 1)];
 					const int i2 = cell_vertex_indices[regular_cell_data.get_vertex_index(t0 + 2)];
-
+					/*
 					{
 						// Transvoxel paper:
 						// It is possible to generate triangles having zero area when one or more of the corner sample
@@ -849,11 +849,14 @@ void build_regular_mesh(Span<const Sdf_T> sdf_data, Span<const uint16_t> type_da
 						const Vector3f p0 = output.vertices[i0];
 						const Vector3f p1 = output.vertices[i1];
 						const Vector3f p2 = output.vertices[i2];
+						
 						if (math::is_triangle_degenerate_approx(p0, p1, p2, 0.000001f)) {
 							--effective_triangle_count;
 							continue;
 						}
+						
 					}
+					*/
 
 					output.indices.push_back(i0);
 					output.indices.push_back(i1);
