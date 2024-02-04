@@ -8,10 +8,17 @@ At the moment, this module doesn't have a distinct release schedule, so this cha
 Semver is not yet in place, so each version can have breaking changes, although it shouldn't happen often across minor versions.
 
 
-1.x - ongoing development - `master`
+1.2.dev - ongoing development - `master`
 --------------------------------------
 
-Primarily developped with Godot 4.2
+Primarily developped with Godot 4.2.
+
+- Added `ZN_SpotNoise`, exposing the same algorithm as the `SpotNoise2D` and `SpotNoise3D` nodes of graph generators
+
+- Fixes
+    - Fixed chunk loading was prioritized incorrectly around the player in specific game start conditions
+    - Fixed `"plugins_list.has(p_plugin)" is true` errors in the editor, at the cost of slight behavior changes. This was caused by existing workarounds to prevent UIs from hiding unexpectedly, which were modified to avoid the error, but are still needed unfortunately.
+    - `VoxelLodTerrain`: `VoxelTool.do_point` and `set_voxel` were not always updating meshes near chunk borders, leaving holes
 
 
 1.1 - 29/12/2023 - `1.1`
