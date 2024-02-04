@@ -18,6 +18,9 @@
 #include "../../editor/voxel_debug.h"
 #endif
 
+
+class NavigationRegion3D;
+
 namespace zylann::voxel {
 
 class VoxelTool;
@@ -123,8 +126,8 @@ public:
 	void set_normalmap_generator_override(Ref<VoxelGenerator> generator_override);
 	Ref<VoxelGenerator> get_normalmap_generator_override() const;
 
-	void set_navigation_region(NavigationRegion3D* nav_region);
-	NavigationRegion3D* get_navigation_region() const;
+	void set_navigation_region(bool p_node);
+	bool get_navigation_region() const;
 
 	void set_normalmap_generator_override_begin_lod_index(int lod_index);
 	int get_normalmap_generator_override_begin_lod_index() const;
@@ -276,19 +279,19 @@ private:
 	void apply_main_thread_update_tasks();
 protected:
 	virtual void apply_mesh_update(VoxelEngine::BlockMeshOutput &ob);
-protected:
-	void apply_data_block_response(VoxelEngine::BlockDataOutput &ob);
-	void apply_detail_texture_update(VoxelEngine::BlockDetailTextureOutput &ob);
-	void apply_detail_texture_update_to_block(
-			VoxelMeshBlockVLT &block, DetailTextureOutput &ob, unsigned int lod_index);
-	void try_apply_parent_detail_texture_to_block(VoxelMeshBlockVLT &block, Vector3i bpos);
 
-	void start_updater();
-	void stop_updater();
-	void start_streamer();
-	void stop_streamer();
-	void reset_maps();
-	void reset_mesh_maps();
+protected:
+void apply_data_block_response(VoxelEngine::BlockDataOutput &ob);
+void apply_detail_texture_update(VoxelEngine::BlockDetailTextureOutput &ob);
+void apply_detail_texture_update_to_block(VoxelMeshBlockVLT &block, DetailTextureOutput &ob, unsigned int lod_index);
+void try_apply_parent_detail_texture_to_block(VoxelMeshBlockVLT &block, Vector3i bpos);
+
+void start_updater();
+void stop_updater();
+void start_streamer();
+void stop_streamer();
+void reset_maps();
+void reset_mesh_maps();
 protected:
 	virtual Vector3 get_local_viewer_pos() const;
 private:
@@ -303,6 +306,9 @@ private:
 
 	void process_deferred_collision_updates(uint32_t timeout_msec);
 	void process_fading_blocks(float delta);
+	void process_nav_meshes(float delta);
+	void GenerateNavMesh(VoxelMeshBlockVLT *block);
+
 
 	struct LocalCameraInfo {
 		Vector3 position;
@@ -325,7 +331,19 @@ private:
 
 	Dictionary _b_get_statistics() const;
 
-	NavigationRegion3D* navigation_region;
+	//NodePath _navigation_region_node_path;
+	//Node3D* _navigation_region_pool_root;
+	bool _navigation_regions;
+	
+	BinaryMutex nav_region_mutex;
+	BinaryMutex nav_queue_mutex;
+
+	std::deque<VoxelMeshBlockVLT*> process_queue;
+	std::unordered_map<VoxelMeshBlockVLT*, NavigationRegion3D*> _nav_region_active_pool;
+	std::vector<NavigationRegion3D*> _available_nav_regions;
+
+	NavigationRegion3D* get_available_nav_region();
+	void clean_nav_region(VoxelMeshBlockVLT *block);
 
 #ifdef TOOLS_ENABLED
 	void update_gizmos();

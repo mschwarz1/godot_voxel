@@ -72,6 +72,8 @@ public:
 	void set_parent_transform(const Transform3D &parent_transform);
 	void update_transition_mesh_transform(unsigned int side, const Transform3D &parent_transform);
 
+	Transform3D get_transform();
+
 	template <typename F>
 	void for_each_mesh_instance_with_transform(F f) const {
 		const Transform3D local_transform(Basis(), _position_in_voxels);
@@ -97,6 +99,8 @@ private:
 	FixedArray<DirectMeshInstance, Cube::SIDE_COUNT> _transition_mesh_instances;
 
 	uint8_t _transition_mask = 0;
+
+	Transform3D _world_transform;
 
 #ifdef VOXEL_DEBUG_LOD_MATERIALS
 	Ref<Material> _debug_material;

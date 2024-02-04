@@ -6,6 +6,9 @@
 #include "../../engine/voxel_engine_updater.h"
 #include "../../meshers/blocky/voxel_mesher_blocky.h"
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
+#include "../../scene/3d/navigation_region_3d.h"
+#include "../../scene/resources/navigation_mesh_source_geometry_data_3d.h"
+#include "../../servers/navigation_server_3d.h"
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../streams/load_all_blocks_data_task.h"
 #include "../../util/containers/container_funcs.h"
@@ -220,6 +223,23 @@ VoxelLodTerrain::VoxelLodTerrain() {
 	// due to how ClassDB gets its default values.
 
 	ZN_PRINT_VERBOSE("Construct VoxelLodTerrain");
+
+	_navigation_regions = false;
+	{
+		MutexLock lock(nav_region_mutex);
+		_available_nav_regions.clear();
+		_nav_region_active_pool.clear();
+		TypedArray<Node> child_nodes = get_children();
+		while (child_nodes.size()) {
+			NavigationRegion3D *child = Object::cast_to<NavigationRegion3D>(child_nodes.pop_back());
+			if (child == nullptr) {
+				continue;
+			}
+			if (!child->is_queued_for_deletion()) {
+				child->queue_free();
+			}
+		}
+	}
 
 	_data = make_shared_instance<VoxelData>();
 	_update_data = make_shared_instance<VoxelLodTerrainUpdateData>();
@@ -740,10 +760,27 @@ int VoxelLodTerrain::get_view_distance() const {
 	return _update_data->settings.view_distance_voxels;
 }
 
-void VoxelLodTerrain::set_navigation_region(NavigationRegion3D *nav_region){ navigation_region = nav_region };
+void VoxelLodTerrain::set_navigation_region(bool navigation_region) {
+	// clean up anything currently existing
+	MutexLock lock(nav_region_mutex);
+	_available_nav_regions.clear();
+	_nav_region_active_pool.clear();
+	TypedArray<Node> child_nodes = get_children();
+	while (child_nodes.size()) {
+		NavigationRegion3D *child = Object::cast_to<NavigationRegion3D>(child_nodes.pop_back());
+		if (child == nullptr) {
+			continue;
+		}
+		if (!child->is_queued_for_deletion()) {
+			child->queue_free();
+		}
+	}
 
-NavigationRegion3D *VoxelLodTerrain::get_navigation_region() const {
-	return navigation_region;
+	_navigation_regions = navigation_region;
+}
+
+bool VoxelLodTerrain::get_navigation_region() const {
+	return _navigation_regions;
 }
 
 // TODO Needs to be clamped dynamically, to avoid the user accidentally setting blowing up memory.
@@ -946,6 +983,7 @@ void VoxelLodTerrain::reset_mesh_maps() {
 	for (unsigned int lod_index = 0; lod_index < state.lods.size(); ++lod_index) {
 		VoxelLodTerrainUpdateData::Lod &lod = state.lods[lod_index];
 		VoxelMeshMap<VoxelMeshBlockVLT> &mesh_map = _mesh_maps_per_lod[lod_index];
+		mesh_map.for_each_block([this](VoxelMeshBlockVLT &block) { clean_nav_region(&block); });
 
 		if (_instancer != nullptr) {
 			// Unload instances
@@ -1317,6 +1355,8 @@ void VoxelLodTerrain::process(float delta) {
 		}
 	}
 
+	process_nav_meshes(delta);
+
 	// Do it after we change mesh block states so materials are updated
 	process_fading_blocks(delta);
 }
@@ -1337,6 +1377,50 @@ Vector3 GetBlockCenter(
 		Vector3 blockCenter = volume_transform.xform(blockCenterNoTrans);
 		return blockCenter;
 	}
+}
+
+void VoxelLodTerrain::clean_nav_region(VoxelMeshBlockVLT *block) {
+	if (_nav_region_active_pool.find(block) == _nav_region_active_pool.end()) {
+		return;
+	}
+	// ZN_PRINT_WARNING("Cleaning block region nav mesh");
+	NavigationRegion3D *block_region = _nav_region_active_pool[block];
+	block_region->get_navigation_mesh()->clear();
+	_nav_region_active_pool.erase(block);
+	MutexLock lock(nav_region_mutex);
+	_available_nav_regions.push_back(block_region);
+}
+
+NavigationMesh *CreateNavMesh() {
+	NavigationMesh *navMesh = memnew(NavigationMesh);
+	//navMesh->set_agent_radius(0.75f);
+	navMesh->set_agent_max_climb(0.5f);
+	navMesh->set_agent_max_slope(45.0f);
+	navMesh->set_cell_size(0.35f);
+	navMesh->set_cell_height(0.35f);
+	return navMesh;
+}
+
+NavigationRegion3D *VoxelLodTerrain::get_available_nav_region() {
+	MutexLock lock(nav_region_mutex);
+
+	NavigationRegion3D *available_nav_region = nullptr;
+	if (_available_nav_regions.empty()) {
+		// create two new nodes the pool must grow ideally this will end up with 1 extra all the time
+		for (int i = 0; i < 3; i++) {
+			NavigationRegion3D *new_nav_region = memnew(NavigationRegion3D);
+			new_nav_region->set_name("lodNavRegion");
+			new_nav_region->set_visible(true);
+			new_nav_region->set_navigation_mesh(CreateNavMesh());
+			add_child(new_nav_region, true);
+			// new_nav_region->set_owner(get_owner());
+			_available_nav_regions.push_back(new_nav_region);
+		}
+	}
+
+	available_nav_region = _available_nav_regions[0];
+	_available_nav_regions.erase(_available_nav_regions.begin());
+	return available_nav_region;
 }
 
 void VoxelLodTerrain::apply_main_thread_update_tasks() {
@@ -1408,6 +1492,10 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 
 		for (unsigned int i = 0; i < lod.mesh_blocks_to_unload.size(); ++i) {
 			const Vector3i bpos = lod.mesh_blocks_to_unload[i];
+			VoxelMeshBlockVLT *block = mesh_map.get_block(bpos);
+			if (block != nullptr) {
+				clean_nav_region(block);
+			}
 			mesh_map.remove_block(bpos, BeforeUnloadMeshAction{ _shader_material_pool });
 
 			_fading_blocks_per_lod[lod_index].erase(bpos);
@@ -1477,7 +1565,8 @@ void VoxelLodTerrain::apply_main_thread_update_tasks() {
 						item.mesh_instance.create();
 						item.mesh_instance.set_mesh(block->get_mesh());
 						item.mesh_instance.set_gi_mode(get_gi_mode());
-						item.mesh_instance.set_transform(volume_transform * Transform3D(Basis(), item.local_position));
+						Transform3D instanceTransform = volume_transform * Transform3D(Basis(), item.local_position);
+						item.mesh_instance.set_transform(instanceTransform);
 						item.mesh_instance.set_material_override(item.shader_material);
 						item.mesh_instance.set_world(*get_world_3d());
 						item.mesh_instance.set_visible(true);
@@ -1688,6 +1777,7 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 	if (mesh.is_null()) {
 		// The mesh is empty
 		if (block != nullptr) {
+			clean_nav_region(block);
 			// No surface anymore in this block, destroy it
 			// TODO Factor removal in a function, it's done in a few places
 			mesh_map.remove_block(ob.position, BeforeUnloadMeshAction{ _shader_material_pool });
@@ -1798,6 +1888,8 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 			}
 			*block->deferred_collider_data = std::move(ob.surfaces);
 		}
+	} else {
+		clean_nav_region(block);
 	}
 
 	block->set_parent_transform(get_global_transform());
@@ -1820,6 +1912,48 @@ void VoxelLodTerrain::apply_mesh_update(VoxelEngine::BlockMeshOutput &ob) {
 		_debug_mesh_update_items.push_back({ ob.position, ob.lod, DebugMeshUpdateItem::LINGER_FRAMES });
 	}
 #endif
+}
+
+void VoxelLodTerrain::GenerateNavMesh(VoxelMeshBlockVLT *block) {
+	if (!block->has_mesh()) {
+		return;
+	}
+	if (_nav_region_active_pool.find(block) == _nav_region_active_pool.end()) {
+		_nav_region_active_pool.insert({ block, get_available_nav_region() });
+	}
+	NavigationRegion3D *_navigation_region_ref = _nav_region_active_pool[block];
+	Ref<NavigationMesh> navMesh = _navigation_region_ref->get_navigation_mesh();
+	// Ref<NavigationMesh> navMesh = CreateNavMesh();
+	//_navigation_region_ref->set_navigation_mesh(navMesh);
+	_navigation_region_ref->set_global_transform(block->get_transform());
+	//navMesh->set_up(block->get_transform().get_basis().get_column(1).normalize());
+	Ref<Mesh> bMesh = block->get_mesh();
+
+	if (bMesh.is_valid()) {
+		navMesh->clear();
+		// navMesh->create_from_mesh(bMesh);
+
+		Ref<NavigationMeshSourceGeometryData3D> source_geometry_data;
+		source_geometry_data.instantiate();
+		source_geometry_data->clear();
+		source_geometry_data->root_node_transform = Transform3D();
+
+		NavigationMesh::ParsedGeometryType parsed_geometry_type = navMesh->get_parsed_geometry_type();
+
+		if (parsed_geometry_type == NavigationMesh::PARSED_GEOMETRY_MESH_INSTANCES ||
+				parsed_geometry_type == NavigationMesh::PARSED_GEOMETRY_BOTH) {
+			source_geometry_data->add_mesh(bMesh, Transform3D());
+		}
+
+		if (true) {
+			// ZN_PRINT_WARNING("Baking navmesh!");
+			NavigationServer3D::get_singleton()->bake_from_source_geometry_data_async(navMesh, source_geometry_data,
+					callable_mp(_navigation_region_ref, &NavigationRegion3D::_bake_finished).bind(navMesh));
+		} else {
+			NavigationServer3D::get_singleton()->bake_from_source_geometry_data(navMesh, source_geometry_data,
+					callable_mp(_navigation_region_ref, &NavigationRegion3D::_bake_finished).bind(navMesh));
+		}
+	}
 }
 
 void VoxelLodTerrain::apply_detail_texture_update(VoxelEngine::BlockDetailTextureOutput &ob) {
@@ -2036,6 +2170,75 @@ void VoxelLodTerrain::abort_async_edits() {
 	state.running_async_edits.clear();
 	// Can't cancel edits which are already running on the thread pool,
 	// so the caller of this function must ensure none of them are running, or none will have an effect
+}
+void VoxelLodTerrain::process_nav_meshes(float delta) {
+	ZN_PROFILE_SCOPE();
+	if (!_navigation_regions) {
+		return;
+	}
+
+	nav_queue_mutex.lock();
+
+	static double processTime = 0.0;
+	processTime += 1.0;
+
+	if (!process_queue.empty() && processTime > 120.0) {
+		VoxelMeshBlockVLT *block = process_queue.front();
+		process_queue.pop_front();
+		GenerateNavMesh(block);
+		nav_queue_mutex.unlock();
+		processTime = 0.0;
+	} else {
+		nav_queue_mutex.unlock();
+	}
+
+	std::vector<std::vector<VoxelMeshBlockVLT *>> viewerNavVectors;
+	// TODO Support for multiple viewers, this is a placeholder implementation
+	VoxelEngine::get_singleton().for_each_viewer( //
+			[this, &viewerNavVectors](ViewerID id, const VoxelEngine::Viewer &viewer) { //
+				std::vector<VoxelMeshBlockVLT *> sortVector;
+				for (unsigned int lod_index = 0; lod_index < 1; ++lod_index) {
+					VoxelMeshMap<VoxelMeshBlockVLT> &mesh_map = _mesh_maps_per_lod[lod_index];
+
+					mesh_map.for_each_block([&sortVector](VoxelMeshBlockVLT &block) { //
+						sortVector.push_back(&block);
+					});
+				}
+				std::sort(begin(sortVector), end(sortVector),
+						[this, &viewer](VoxelMeshBlockVLT *lhs, VoxelMeshBlockVLT *rhs) {
+							Transform3D volume_transform = get_global_transform();
+							const int mesh_block_size = get_mesh_block_size();
+							Vector3 lhs_block_center =
+									GetBlockCenter(volume_transform, lhs, mesh_block_size, _cube_sphere, get_radius());
+							Vector3 rhs_block_center =
+									GetBlockCenter(volume_transform, rhs, mesh_block_size, _cube_sphere, get_radius());
+							return viewer.world_position.distance_to(lhs_block_center) <
+									viewer.world_position.distance_to(rhs_block_center);
+						});
+				viewerNavVectors.push_back(sortVector);
+			});
+	for (int i = 0; i < viewerNavVectors.size(); i++) {
+		for (int j = 0; j < viewerNavVectors[i].size(); j++) {
+			VoxelMeshBlockVLT *block = viewerNavVectors[i][j];
+			if (j < 3) {
+				if (_nav_region_active_pool.find(block) == _nav_region_active_pool.end()) {
+					nav_queue_mutex.lock();
+					if (std::find(process_queue.begin(), process_queue.end(), block) == process_queue.end()) {
+						process_queue.push_back(block);
+					}
+					nav_queue_mutex.unlock();
+				}
+			} else if (j >= (4)) {
+				nav_queue_mutex.lock();
+				auto iter = std::find(process_queue.begin(), process_queue.end(), block);
+				if (iter != process_queue.end()) {
+					process_queue.erase(iter);
+				}
+				nav_queue_mutex.unlock();
+				clean_nav_region(block);
+			}
+		}
+	}
 }
 
 void VoxelLodTerrain::process_fading_blocks(float delta) {
@@ -3243,7 +3446,7 @@ void VoxelLodTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_cube_sphere", "enabled"), &VoxelLodTerrain::set_cube_sphere);
 	ClassDB::bind_method(D_METHOD("is_cube_sphere"), &VoxelLodTerrain::is_cube_sphere);
 
-	ClassDB::bind_method(D_METHOD("set_navigation_region", "nav_region"), &VoxelLodTerrain::set_navigation_region;
+	ClassDB::bind_method(D_METHOD("set_navigation_region", "nav_region"), &VoxelLodTerrain::set_navigation_region);
 	ClassDB::bind_method(D_METHOD("get_navigation_region"), &VoxelLodTerrain::get_navigation_region);
 	// ClassDB::bind_method(D_METHOD("_on_stream_params_changed"), &VoxelLodTerrain::_on_stream_params_changed);
 
@@ -3320,7 +3523,7 @@ void VoxelLodTerrain::_bind_methods() {
 			"is_threaded_update_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_gpu_generation"), "set_generator_use_gpu", "get_generator_use_gpu");
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "navigation_region"), "set_navigation_region", "get_navigation_region");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "navigation_region"), "set_navigation_region", "get_navigation_region");
 }
 
 } // namespace zylann::voxel

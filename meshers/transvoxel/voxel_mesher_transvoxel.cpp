@@ -252,6 +252,28 @@ void make_cube_sphere(transvoxel::MeshArrays &output, Vector3d offset, int radiu
 	}
 }
 
+void round_verts(transvoxel::MeshArrays &output) {
+	for (int i = 0; i < output.vertices.size(); i++) {
+		double value;
+		value = (int)(output.vertices[i].x * 10000 + .5);
+		output.vertices[i].x = (double)value / 10000;
+		value = (int)(output.vertices[i].y * 10000 + .5);
+		output.vertices[i].y = (double)value / 10000;
+		value = (int)(output.vertices[i].z * 10000 + .5);
+		output.vertices[i].z = (double)value / 10000;
+	}
+
+	for (int i = 0; i < output.lod_data.size(); i++) {
+		double value;
+		value = (int)(output.lod_data[i].secondary_position.x * 10000 + .5);
+		output.lod_data[i].secondary_position.x = (double)value / 10000;
+		value = (int)(output.lod_data[i].secondary_position.y * 10000 + .5);
+		output.lod_data[i].secondary_position.y = (double)value / 10000;
+		value = (int)(output.lod_data[i].secondary_position.z * 10000 + .5);
+		output.lod_data[i].secondary_position.z = (double)value / 10000;
+	}
+}
+
 void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher::Input &input) {
 	ZN_PROFILE_SCOPE();
 
@@ -347,6 +369,8 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 		make_cube_sphere(*combined_mesh_arrays, offset, _radius);
 	}
 
+	round_verts(*combined_mesh_arrays);
+
 	Array gd_arrays;
 	fill_surface_arrays(gd_arrays, *combined_mesh_arrays);
 	output.offset = offset; // doesn't seem to do anything
@@ -362,10 +386,9 @@ void VoxelMesherTransvoxel::build(VoxelMesher::Output &output, const VoxelMesher
 
 	if (_texture_mode == TEXTURES_BLEND_4_OVER_16) {
 		output.mesh_flags |= (RenderingServer::ARRAY_CUSTOM_RG_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT);
-	}
-	else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH)
-	{
-		output.mesh_flags |= (RenderingServer::ARRAY_CUSTOM_RG_FLOAT << Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT);// << Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT);
+	} else if (_texture_mode == TEXTURES_TYPE_PASSTHROUGH) {
+		output.mesh_flags |= (RenderingServer::ARRAY_CUSTOM_RG_FLOAT
+				<< Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT); // << Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT);
 	}
 }
 

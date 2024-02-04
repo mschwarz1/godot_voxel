@@ -270,8 +270,15 @@ void VoxelMeshBlockVLT::set_parent_transform(const Transform3D &parent_transform
 		if (_static_body.is_valid()) {
 			_static_body.set_transform(world_transform);
 		}
+
+		_world_transform = world_transform;
 	}
 }
+
+Transform3D VoxelMeshBlockVLT::get_transform() {
+	return _world_transform;
+}
+
 
 void VoxelMeshBlockVLT::update_transition_mesh_transform(unsigned int side, const Transform3D &parent_transform) {
 	DirectMeshInstance &mi = _transition_mesh_instances[side];
@@ -281,6 +288,7 @@ void VoxelMeshBlockVLT::update_transition_mesh_transform(unsigned int side, cons
 		// TODO Optimize: could be optimized due to the basis being identity
 		const Transform3D world_transform = parent_transform * local_transform;
 		mi.set_transform(world_transform);
+		_world_transform = world_transform;
 	}
 }
 
