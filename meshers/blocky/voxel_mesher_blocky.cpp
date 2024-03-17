@@ -486,11 +486,13 @@ void VoxelMesherBlocky::build(VoxelMesher::Output &output, const VoxelMesher::In
 	// => Could be implemented in a separate class?
 
 	const VoxelBufferInternal &voxels = input.voxels;
+	/*
 #ifdef TOOLS_ENABLED
 	if (input.lod_index != 0) {
 		WARN_PRINT("VoxelMesherBlocky received lod != 0, it is not supported");
 	}
 #endif
+*/
 
 	// Iterate 3D padded data to extract voxel faces.
 	// This is the most intensive job in this class, so all required data should be as fit as possible.
@@ -531,6 +533,7 @@ void VoxelMesherBlocky::build(VoxelMesher::Output &output, const VoxelMesher::In
 	}
 
 	const Vector3i block_size = voxels.get_size();
+	const Vector3i block_size_scaled = block_size << input.lod_index;
 	const VoxelBufferInternal::Depth channel_depth = voxels.get_channel_depth(channel);
 
 	VoxelMesher::Output::CollisionSurface *collision_surface = nullptr;
@@ -567,7 +570,14 @@ void VoxelMesherBlocky::build(VoxelMesher::Output &output, const VoxelMesher::In
 				return;
 		}
 	}
-
+	int scaler = (1 << input.lod_index);
+	for (unsigned int material_index = 0; material_index < material_count; ++material_index) {
+		Arrays &arrays = arrays_per_material[material_index];
+		for (size_t i = 0; i < arrays.positions.size(); i++)
+		{
+			arrays.positions[i] = arrays.positions[i] * scaler;
+		}
+	}
 	// TODO Optimization: we could return a single byte array and use Mesh::add_surface down the line?
 	// That API does not seem to exist yet though.
 
