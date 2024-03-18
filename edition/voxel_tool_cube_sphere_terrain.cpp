@@ -5,11 +5,12 @@
 #include "../storage/voxel_data.h"
 #include "../storage/voxel_metadata_variant.h"
 #include "../terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
-#include "../util/godot/Core/array.h"
-#include "../util/godot/Classes/ref_counted.h"
-#include "funcs.h"
+#include "../util/godot/classes/ref_counted.h"
+#include "../util/godot/core/array.h"
 #include "../util/math/conv.h"
 #include "../util/voxel_raycast.h"
+
+using namespace zylann::godot;
 
 namespace zylann::voxel {
 
@@ -42,7 +43,7 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 		bool operator()(const VoxelRaycastState &rs) const {
 			VoxelSingleValue defval;
 			defval.i = 0;
-			const uint64_t v = data.get_voxel(rs.hit_position, VoxelBufferInternal::CHANNEL_COLOR, defval).i;
+			const uint64_t v = data.get_voxel(rs.hit_position, VoxelBuffer::CHANNEL_COLOR, defval).i;
 			return v != 0;
 		}
 	};
@@ -51,7 +52,7 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 		const VoxelData &data;
 
 		bool operator()(const VoxelRaycastState &rs) const {
-			const float v = data.get_voxel_f(rs.hit_position, VoxelBufferInternal::CHANNEL_SDF);
+			const float v = data.get_voxel_f(rs.hit_position, VoxelBuffer::CHANNEL_SDF);
 			return v < 0;
 		}
 	};
@@ -66,7 +67,7 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 		bool operator()(const VoxelRaycastState &rs) const {
 			VoxelSingleValue defval;
 			defval.i = 0;
-			const int v = data.get_voxel(rs.hit_position, VoxelBufferInternal::CHANNEL_TYPE, defval).i;
+			const int v = data.get_voxel(rs.hit_position, VoxelBuffer::CHANNEL_TYPE, defval).i;
 
 			if (baked_data.has_model(v) == false) {
 				return false;
@@ -147,7 +148,7 @@ Ref<VoxelRaycastResult> VoxelToolCubeSphereTerrain::raycast(
 	return res;
 }
 
-void VoxelToolCubeSphereTerrain::copy(Vector3i pos, VoxelBufferInternal &dst, uint8_t channels_mask) const {
+void VoxelToolCubeSphereTerrain::copy(Vector3i pos, VoxelBuffer &dst, uint8_t channels_mask) const {
 	ERR_FAIL_COND(_terrain == nullptr);
 	if (channels_mask == 0) {
 		channels_mask = (1 << _channel);
@@ -155,18 +156,17 @@ void VoxelToolCubeSphereTerrain::copy(Vector3i pos, VoxelBufferInternal &dst, ui
 	_terrain->get_storage().copy(pos, dst, channels_mask);
 }
 
-void VoxelToolCubeSphereTerrain::paste(Vector3i pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask) {
+void VoxelToolCubeSphereTerrain::paste(Vector3i pos, const VoxelBuffer &src, uint8_t channels_mask) {
 	ERR_FAIL_COND(_terrain == nullptr);
-	ERR_FAIL_COND(p_voxels.is_null());
 	if (channels_mask == 0) {
 		channels_mask = (1 << _channel);
 	}
-	_terrain->get_storage().paste(pos, p_voxels->get_buffer(), channels_mask, false);
-	_post_edit(Box3i(pos, p_voxels->get_buffer().get_size()));
+	_terrain->get_storage().paste(pos, src, channels_mask, false);
+	_post_edit(Box3i(pos, src.get_size()));
 }
 
-void VoxelToolCubeSphereTerrain::paste_masked(
-		Vector3i pos, Ref<gd::VoxelBuffer> p_voxels, uint8_t channels_mask, uint8_t mask_channel, uint64_t mask_value) {
+void VoxelToolCubeSphereTerrain::paste_masked(Vector3i pos, Ref<godot::VoxelBuffer> p_voxels, uint8_t channels_mask,
+		uint8_t mask_channel, uint64_t mask_value) {
 	ERR_FAIL_COND(_terrain == nullptr);
 	ERR_FAIL_COND(p_voxels.is_null());
 	if (channels_mask == 0) {
@@ -272,6 +272,7 @@ void VoxelToolCubeSphereTerrain::set_voxel_metadata(Vector3i pos, Variant meta) 
 	ERR_FAIL_COND(_terrain == nullptr);
 	VoxelData &data = _terrain->get_storage();
 	data.set_voxel_metadata(pos, meta);
+	_terrain->post_edit_area(Box3i(pos, Vector3i(1, 1, 1)), false);
 }
 
 Variant VoxelToolCubeSphereTerrain::get_voxel_metadata(Vector3i pos) const {
@@ -293,13 +294,13 @@ void VoxelToolCubeSphereTerrain::run_blocky_random_tick_static(VoxelData &data, 
 
 	const int block_count = voxel_count / batch_count;
 	// const int bs_mask = map.get_block_size_mask();
-	const VoxelBufferInternal::ChannelId channel = VoxelBufferInternal::CHANNEL_TYPE;
+	const VoxelBuffer::ChannelId channel = VoxelBuffer::CHANNEL_TYPE;
 
 	struct Pick {
 		uint64_t value;
 		Vector3i rpos;
 	};
-	static thread_local std::vector<Pick> picks;
+	static thread_local StdVector<Pick> picks;
 	picks.reserve(batch_count);
 
 	const float block_volume = math::cubed(block_size);
@@ -331,13 +332,13 @@ void VoxelToolCubeSphereTerrain::run_blocky_random_tick_static(VoxelData &data, 
 			SpatialLock3D &spatial_lock = data.get_spatial_lock(0);
 			SpatialLock3D::Read srlock(spatial_lock, BoxBounds3i::from_position(block_pos));
 
-			std::shared_ptr<VoxelBufferInternal> voxels_ptr = data.try_get_block_voxels(block_pos);
+			std::shared_ptr<VoxelBuffer> voxels_ptr = data.try_get_block_voxels(block_pos);
 
 			if (voxels_ptr != nullptr) {
 				// Doing ONLY reads here.
-				const VoxelBufferInternal &voxels = *voxels_ptr;
+				const VoxelBuffer &voxels = *voxels_ptr;
 
-				if (voxels.get_channel_compression(channel) == VoxelBufferInternal::COMPRESSION_UNIFORM) {
+				if (voxels.get_channel_compression(channel) == VoxelBuffer::COMPRESSION_UNIFORM) {
 					const uint64_t v = voxels.get_voxel(0, 0, 0, channel);
 					if (lib_data.has_model(v)) {
 						const VoxelBlockyModel::BakedData &vt = lib_data.models[v];
@@ -382,14 +383,15 @@ void VoxelToolCubeSphereTerrain::run_blocky_random_tick_static(VoxelData &data, 
 	}
 }
 
-
-static Ref<VoxelBlockyLibraryBase> get_voxel_library(const VoxelCubeSphereTerrain &terrain) {
+namespace {
+Ref<VoxelBlockyLibraryBase> get_voxel_library(const VoxelCubeSphereTerrain &terrain) {
 	Ref<VoxelMesherBlocky> blocky_mesher = terrain.get_mesher();
 	if (blocky_mesher.is_valid()) {
 		return blocky_mesher->get_library();
 	}
 	return Ref<VoxelBlockyLibraryBase>();
 }
+} // namespace
 
 // TODO This function snaps the given AABB to blocks, this is not intuitive. Should figure out a way to respect the
 // area. Executes a function on random voxels in the provided area, using the type channel. This allows to implement
@@ -440,7 +442,7 @@ void VoxelToolCubeSphereTerrain::run_blocky_random_tick(
 			});
 #elif defined(ZN_GODOT_EXTENSION)
 	// TODO GDX: Can't call Callables
-	ZN_PRINT_ERROR("VoxelToolTerrain::run_blocky_random_tick isn't supported in GDExtension, cannot call Callables");
+	ZN_PRINT_ERROR("VoxelToolCubeSphereTerrain::run_blocky_random_tick isn't supported in GDExtension, cannot call Callables");
 #endif
 }
 
@@ -457,7 +459,7 @@ void VoxelToolCubeSphereTerrain::for_each_voxel_metadata_in_area(AABB voxel_area
 	VoxelData &data = _terrain->get_storage();
 
 	data_block_box.for_each_cell([&data, &callback, voxel_box](Vector3i block_pos) {
-		std::shared_ptr<VoxelBufferInternal> voxels_ptr = data.try_get_block_voxels(block_pos);
+		std::shared_ptr<VoxelBuffer> voxels_ptr = data.try_get_block_voxels(block_pos);
 
 		if (voxels_ptr == nullptr) {
 			return;
@@ -472,7 +474,7 @@ void VoxelToolCubeSphereTerrain::for_each_voxel_metadata_in_area(AABB voxel_area
 #if defined(ZN_GODOT)
 		voxels_ptr->for_each_voxel_metadata_in_area(
 				rel_voxel_box, [&callback, block_origin](Vector3i rel_pos, const VoxelMetadata &meta) {
-					Variant v = gd::get_as_variant(meta);
+					Variant v = godot::get_as_variant(meta);
 					const Variant key = rel_pos + block_origin;
 					const Variant *args[2] = { &key, &v };
 					Callable::CallError err;
@@ -493,7 +495,6 @@ void VoxelToolCubeSphereTerrain::for_each_voxel_metadata_in_area(AABB voxel_area
 #endif
 	});
 }
-
 
 void VoxelToolCubeSphereTerrain::do_path(Span<const Vector3> positions, Span<const float> radii) {
 	ZN_PROFILE_SCOPE();
@@ -562,7 +563,7 @@ void VoxelToolCubeSphereTerrain::do_path(Span<const Vector3> positions, Span<con
 			// uint64_t value = _value;
 			// segment_box.for_each_cell_zxy([&grid, &cone, value](Vector3i pos) {
 			// 	if (cone(pos) < 0.f) {
-			// 		grid.set_voxel_no_lock(pos, value, VoxelBufferInternal::CHANNEL_TYPE);
+			// 		grid.set_voxel_no_lock(pos, value, VoxelBuffer::CHANNEL_TYPE);
 			// 	}
 			// });
 		}

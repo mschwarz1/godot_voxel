@@ -51,12 +51,12 @@ public:
 	// Using std::vector because they make this mesher twice as fast than Godot Vectors.
 	// See why: https://github.com/godotengine/godot/issues/24731
 	struct Arrays {
-		std::vector<Vector3f> positions;
-		std::vector<Vector3f> normals;
-		std::vector<Vector2f> uvs;
-		std::vector<Color> colors;
-		std::vector<int> indices;
-		std::vector<float> tangents;
+		StdVector<Vector3f> positions;
+		StdVector<Vector3f> normals;
+		StdVector<Vector2f> uvs;
+		StdVector<Color> colors;
+		StdVector<int> indices;
+		StdVector<float> tangents;
 
 		void clear() {
 			positions.clear();
@@ -77,18 +77,17 @@ public:
 	}
 
 protected:
+	static void _bind_methods();
 
-	struct Parameters 
-	{
+	struct Parameters {
 		float baked_occlusion_darkness = 0.8;
 		bool bake_occlusion = true;
 		Ref<VoxelBlockyLibraryBase> library;
 	};
+
 	struct Cache {
-		std::vector<Arrays> arrays_per_material;
+		StdVector<Arrays> arrays_per_material;
 	};
-
-
 
 	// Parameters
 	Parameters _parameters;
@@ -96,14 +95,6 @@ protected:
 
 	// Work cache
 	static Cache &get_tls_cache();
-
-
-	static void _bind_methods();
-
-private:
-
-
-
 };
 
 } // namespace zylann::voxel

@@ -2,6 +2,7 @@
 #include "../../constants/voxel_constants.h"
 #include "../../constants/voxel_string_names.h"
 #include "../../edition/voxel_tool_cube_sphere_terrain.h"
+#include "../../engine/buffered_task_scheduler.h"
 #include "../../engine/voxel_engine.h"
 #include "../../engine/voxel_engine_updater.h"
 #include "../../generators/generate_block_task.h"
@@ -32,9 +33,9 @@
 #include "../instancing/voxel_instancer.h"
 #include "../voxel_data_block_enter_info.h"
 #include "../voxel_save_completion_tracker.h"
-#include "../voxel_viewer.h"
 #include "voxel_cs_terrain_multiplayer_synchronizer.h"
 
+#include "../voxel_viewer.h"
 #ifdef TOOLS_ENABLED
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
 #endif
@@ -101,7 +102,7 @@ VoxelCubeSphereTerrain::VoxelCubeSphereTerrain() {
 	callbacks.data = this;
 	callbacks.mesh_output_callback = [](void *cb_data, VoxelEngine::BlockMeshOutput &ob) {
 		VoxelCubeSphereTerrain *self = reinterpret_cast<VoxelCubeSphereTerrain *>(cb_data);
-		ApplyMeshUpdateTask *task = memnew(ApplyMeshUpdateTask);
+		ApplyMeshUpdateTask *task = ZN_NEW(ApplyMeshUpdateTask);
 		task->volume_id = self->_volume_id;
 		task->self = self;
 		task->data = std::move(ob);
@@ -138,101 +139,6 @@ void VoxelCubeSphereTerrain::set_material_override(Ref<Material> material) {
 	});
 }
 
-#ifdef TOOLS_ENABLED
-
-void VoxelCubeSphereTerrain::get_configuration_warnings(PackedStringArray &warnings) const {
-	VoxelNode::get_configuration_warnings(warnings);
-
-	if (get_generator_use_gpu()) {
-		Ref<VoxelGenerator> generator = get_generator();
-		if (generator.is_valid() && !generator->supports_shaders()) {
-			warnings.append(String("`use_gpu_generation` is enabled, but {0} does not support running on the GPU.")
-									.format(varray(generator->get_class())));
-		}
-	}
-
-	if (get_bounds().is_empty()) {
-		warnings.append(String("Terrain bounds have an empty size."));
-	}
-}
-
-#endif
-
-// DEBUG LAND
-
-void VoxelCubeSphereTerrain::debug_set_draw_enabled(bool enabled) {
-#ifdef TOOLS_ENABLED
-	_debug_draw_enabled = enabled;
-	if (_debug_draw_enabled) {
-		if (is_inside_tree()) {
-			_debug_renderer.set_world(is_visible_in_tree() ? *get_world_3d() : nullptr);
-		}
-	} else {
-		_debug_renderer.clear();
-		// _debug_mesh_update_items.clear();
-		// _debug_edit_items.clear();
-	}
-#endif
-}
-
-bool VoxelCubeSphereTerrain::debug_is_draw_enabled() const {
-#ifdef TOOLS_ENABLED
-	return _debug_draw_enabled;
-#else
-	return false;
-#endif
-}
-
-void VoxelCubeSphereTerrain::debug_set_draw_flag(DebugDrawFlag flag_index, bool enabled) {
-#ifdef TOOLS_ENABLED
-	ERR_FAIL_INDEX(flag_index, DEBUG_DRAW_FLAGS_COUNT);
-	if (enabled) {
-		_debug_draw_flags |= (1 << flag_index);
-	} else {
-		_debug_draw_flags &= ~(1 << flag_index);
-	}
-#endif
-}
-
-bool VoxelCubeSphereTerrain::debug_get_draw_flag(DebugDrawFlag flag_index) const {
-#ifdef TOOLS_ENABLED
-	ERR_FAIL_INDEX_V(flag_index, DEBUG_DRAW_FLAGS_COUNT, false);
-	return (_debug_draw_flags & (1 << flag_index)) != 0;
-#else
-	return false;
-#endif
-}
-
-#ifdef TOOLS_ENABLED
-
-void VoxelCubeSphereTerrain::process_debug_draw() {
-	ZN_PROFILE_SCOPE();
-
-	DebugRenderer &dr = _debug_renderer;
-	dr.begin();
-
-	const Transform3D parent_transform = get_global_transform();
-
-	// Volume bounds
-	if (debug_get_draw_flag(DEBUG_DRAW_VOLUME_BOUNDS)) {
-		const Box3i bounds_in_voxels = get_bounds();
-		const float bounds_in_voxels_len = Vector3(bounds_in_voxels.size).length();
-
-		if (bounds_in_voxels_len < 10000) {
-			const Vector3 margin = Vector3(1, 1, 1) * bounds_in_voxels_len * 0.0025f;
-			const Vector3 size = bounds_in_voxels.size;
-			const Transform3D local_transform(
-					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.pos) - margin);
-			dr.draw_box(parent_transform * local_transform, DebugColors::ID_VOXEL_BOUNDS);
-		}
-	}
-
-	dr.end();
-}
-
-#endif
-
-// BINDING LAND
 Ref<Material> VoxelCubeSphereTerrain::get_material_override() const {
 	return _material_override;
 }
@@ -257,8 +163,8 @@ void VoxelCubeSphereTerrain::set_stream(Ref<VoxelStream> p_stream) {
 #ifdef TOOLS_ENABLED
 	if (p_stream.is_valid()) {
 		if (Engine::get_singleton()->is_editor_hint()) {
-			Ref<Script> script = p_stream->get_script();
-			if (script.is_valid()) {
+			Ref<Script> stream_script = p_stream->get_script();
+			if (stream_script.is_valid()) {
 				// Safety check. It's too easy to break threads by making a script reload.
 				// You can turn it back on, but be careful.
 				_run_stream_in_editor = false;
@@ -295,8 +201,8 @@ void VoxelCubeSphereTerrain::set_generator(Ref<VoxelGenerator> p_generator) {
 #ifdef TOOLS_ENABLED
 	if (p_generator.is_valid()) {
 		if (Engine::get_singleton()->is_editor_hint()) {
-			Ref<Script> script = p_generator->get_script();
-			if (script.is_valid()) {
+			Ref<Script> generator_script = p_generator->get_script();
+			if (generator_script.is_valid()) {
 				// Safety check. It's too easy to break threads by making a script reload.
 				// You can turn it back on, but be careful.
 				_run_stream_in_editor = false;
@@ -347,24 +253,8 @@ void VoxelCubeSphereTerrain::set_mesh_block_size(unsigned int mesh_block_size) {
 
 	_mesh_block_size_po2 = po2;
 
-	if (_instancer != nullptr) {
-		VoxelInstancer &instancer = *_instancer;
-		_mesh_map.for_each_block([&instancer, this](VoxelMeshBlockVT &block) { //
-			instancer.on_mesh_block_exit(block.position, 0);
-			if (block.is_loaded) {
-				emit_mesh_block_exited(block.position);
-			}
-		});
-	} else {
-		_mesh_map.for_each_block([this](VoxelMeshBlockVT &block) { //
-			if (block.is_loaded) {
-				emit_mesh_block_exited(block.position);
-			}
-		});
-	}
-
 	// Unload all mesh blocks regardless of refcount
-	_mesh_map.clear();
+	clear_mesh_map();
 
 	// Make paired viewers re-view the new meshable area
 	for (unsigned int i = 0; i < _paired_viewers.size(); ++i) {
@@ -413,6 +303,20 @@ void VoxelCubeSphereTerrain::_on_gi_mode_changed() {
 	});
 }
 
+void VoxelCubeSphereTerrain::_on_shadow_casting_changed() {
+	const RenderingServer::ShadowCastingSetting mode = RenderingServer::ShadowCastingSetting(get_shadow_casting());
+	_mesh_map.for_each_block([mode](VoxelMeshBlockVT &block) { //
+		block.set_shadow_casting(mode);
+	});
+}
+
+void VoxelCubeSphereTerrain::_on_render_layers_mask_changed() {
+	const int mask = get_render_layers_mask();
+	_mesh_map.for_each_block([mask](VoxelMeshBlockVT &block) { //
+		block.set_render_layers_mask(mask);
+	});
+}
+
 Ref<VoxelMesher> VoxelCubeSphereTerrain::get_mesher() const {
 	return _mesher;
 }
@@ -437,7 +341,7 @@ void VoxelCubeSphereTerrain::set_mesher(Ref<VoxelMesher> mesher) {
 	update_configuration_warnings();
 }
 
-void VoxelCubeSphereTerrain::get_viewers_in_area(std::vector<ViewerID> &out_viewer_ids, Box3i voxel_box) const {
+void VoxelCubeSphereTerrain::get_viewers_in_area(StdVector<ViewerID> &out_viewer_ids, Box3i voxel_box) const {
 	const Box3i block_box = voxel_box.downscaled(get_data_block_size());
 
 	for (auto it = _paired_viewers.begin(); it != _paired_viewers.end(); ++it) {
@@ -447,14 +351,6 @@ void VoxelCubeSphereTerrain::get_viewers_in_area(std::vector<ViewerID> &out_view
 			out_viewer_ids.push_back(viewer.id);
 		}
 	}
-}
-
-void VoxelCubeSphereTerrain::set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer) {
-	_multiplayer_synchronizer = synchronizer;
-}
-
-const VoxelCSTerrainMultiplayerSynchronizer *VoxelCubeSphereTerrain::get_multiplayer_synchronizer() const {
-	return _multiplayer_synchronizer;
 }
 
 void VoxelCubeSphereTerrain::set_generate_collisions(bool enabled) {
@@ -494,16 +390,16 @@ float VoxelCubeSphereTerrain::get_collision_margin() const {
 	return _collision_margin;
 }
 
-unsigned int VoxelCubeSphereTerrain::get_max_view_distance() const {
+int VoxelCubeSphereTerrain::get_max_view_distance() const {
 	return _max_view_distance_voxels;
 }
 
-void VoxelCubeSphereTerrain::set_max_view_distance(unsigned int distance_in_voxels) {
+void VoxelCubeSphereTerrain::set_max_view_distance(int distance_in_voxels) {
 	ERR_FAIL_COND(distance_in_voxels < 0);
 	_max_view_distance_voxels = distance_in_voxels;
 
 	if (_instancer != nullptr) {
-		_instancer->set_mesh_lod_distance(_max_view_distance_voxels);
+		_instancer->update_mesh_lod_distances_from_parent();
 	}
 }
 
@@ -557,7 +453,7 @@ void VoxelCubeSphereTerrain::try_schedule_mesh_update(VoxelMeshBlockVT &mesh_blo
 	// If we get an empty box at this point, something is wrong with the caller
 	ZN_ASSERT_RETURN(!data_box.is_empty());
 
-	const bool data_available = _data->has_all_blocks_in_area(data_box);
+	const bool data_available = _data->has_all_blocks_in_area(data_box, 0);
 
 	if (data_available) {
 		// Regardless of if the updater is updating the block already,
@@ -577,9 +473,10 @@ void VoxelCubeSphereTerrain::view_mesh_block(Vector3i bpos, bool mesh_flag, bool
 
 	if (block == nullptr) {
 		// Create if not found
-		block = memnew(VoxelMeshBlockVT(bpos, get_mesh_block_size()));
-		block->offset = CalculatePositionOffset(bpos * get_mesh_block_size());
+		block = ZN_NEW(VoxelMeshBlockVT(bpos, get_mesh_block_size()));
 		block->set_world(get_world_3d());
+		block->offset = CalculatePositionOffset(bpos * get_mesh_block_size());
+
 		_mesh_map.set_block(bpos, block);
 	}
 	CRASH_COND(block == nullptr);
@@ -595,6 +492,9 @@ void VoxelCubeSphereTerrain::view_mesh_block(Vector3i bpos, bool mesh_flag, bool
 	// Before that, meshes were updated only when a data block was loaded or modified,
 	// so changing block size or viewer flags did not make meshes appear.
 	try_schedule_mesh_update(*block);
+
+	// TODO this logic schedules a mesh update even if there is a mesh already. It hides the fact that mixing up
+	// viewers with collisions and viewers without will not actually create colliders/meshes individually.
 
 	// TODO viewers with varying flags during the game is not supported at the moment.
 	// They have to be re-created, which may cause world re-load...
@@ -628,7 +528,7 @@ void VoxelCubeSphereTerrain::unview_mesh_block(Vector3i bpos, bool mesh_flag, bo
 }
 
 void VoxelCubeSphereTerrain::unload_mesh_block(Vector3i bpos) {
-	std::vector<Vector3i> &blocks_pending_update = _blocks_pending_update;
+	StdVector<Vector3i> &blocks_pending_update = _blocks_pending_update;
 
 	bool was_loaded = false;
 	_mesh_map.remove_block(bpos, [&blocks_pending_update, &was_loaded](const VoxelMeshBlockVT &block) {
@@ -661,11 +561,20 @@ void VoxelCubeSphereTerrain::save_all_modified_blocks(bool with_copy, std::share
 	_data->consume_all_modifications(_blocks_to_save, with_copy);
 
 	if (stream.is_valid() && _instancer != nullptr && stream->supports_instance_blocks()) {
-		_instancer->save_all_modified_blocks(task_scheduler, tracker);
+		_instancer->save_all_modified_blocks(task_scheduler, tracker, true);
 	}
 
-	// And flush immediately
-	consume_block_data_save_requests(task_scheduler, tracker);
+	consume_block_data_save_requests(task_scheduler, tracker,
+			// Require all data we just gathered to be written to disk if the stream uses a cache. So if the
+			// game crashes or gets killed after all tasks are done, data won't be lost.
+			true);
+
+	if (tracker != nullptr) {
+		// Using buffered count instead of `_blocks_to_save` because it can also contain tasks from VoxelInstancer
+		tracker->set_count(task_scheduler.get_io_count());
+	}
+
+	// Schedule all tasks
 	task_scheduler.flush();
 }
 
@@ -680,7 +589,7 @@ void VoxelCubeSphereTerrain::set_instancer(VoxelInstancer *instancer) {
 	_instancer = instancer;
 }
 
-void VoxelCubeSphereTerrain::get_meshed_block_positions(std::vector<Vector3i> &out_positions) const {
+void VoxelCubeSphereTerrain::get_meshed_block_positions(StdVector<Vector3i> &out_positions) const {
 	_mesh_map.for_each_block([&out_positions](const VoxelMeshBlock &mesh_block) {
 		if (mesh_block.has_mesh()) {
 			out_positions.push_back(mesh_block.position);
@@ -696,7 +605,7 @@ void VoxelCubeSphereTerrain::get_meshed_block_offsets(std::vector<Vector3d> &out
 	});
 }
 
-// This function is primarily intented for editor use cases at the moment.
+// This function is primarily intended for editor use cases at the moment.
 // It will be slower than using the instancing generation events,
 // because it has to query VisualServer, which then allocates and decodes vertex buffers (assuming they are cached).
 Array VoxelCubeSphereTerrain::get_mesh_block_surface(Vector3i block_pos) const {
@@ -818,6 +727,28 @@ void VoxelCubeSphereTerrain::stop_streamer() {
 	// VoxelEngine::get_singleton().set_volume_generator(_volume_id, Ref<VoxelGenerator>());
 	_loading_blocks.clear();
 	_blocks_pending_load.clear();
+	_quick_reloading_blocks.clear();
+	_unloaded_saving_blocks.clear();
+}
+
+void VoxelCubeSphereTerrain::clear_mesh_map() {
+	if (_instancer != nullptr) {
+		VoxelInstancer &instancer = *_instancer;
+		_mesh_map.for_each_block([&instancer, this](VoxelMeshBlockVT &block) { //
+			instancer.on_mesh_block_exit(block.position, 0);
+			if (block.is_loaded) {
+				emit_mesh_block_exited(block.position);
+			}
+		});
+	} else {
+		_mesh_map.for_each_block([this](VoxelMeshBlockVT &block) { //
+			if (block.is_loaded) {
+				emit_mesh_block_exited(block.position);
+			}
+		});
+	}
+
+	_mesh_map.clear();
 }
 
 void VoxelCubeSphereTerrain::reset_map() {
@@ -828,7 +759,7 @@ void VoxelCubeSphereTerrain::reset_map() {
 	});
 	_data->reset_maps();
 
-	_mesh_map.clear();
+	clear_mesh_map();
 
 	_loading_blocks.clear();
 	_blocks_pending_load.clear();
@@ -895,6 +826,7 @@ void VoxelCubeSphereTerrain::post_edit_area(Box3i box_in_voxels, bool update_mes
 		}
 	}
 }
+
 void VoxelCubeSphereTerrain::_notification(int p_what) {
 	struct SetWorldAction {
 		World3D *world;
@@ -987,11 +919,13 @@ void VoxelCubeSphereTerrain::_notification(int p_what) {
 	}
 }
 
-inline Vector3i get_block_center(Vector3i pos, int bs) {
+namespace {
+
+Vector3i get_block_center(Vector3i pos, int bs) {
 	return pos * bs + Vector3iUtil::create(bs / 2);
 }
 
-static void init_sparse_grid_priority_dependency(PriorityDependency &dep, Vector3i block_position, int block_size,
+void init_sparse_grid_priority_dependency(PriorityDependency &dep, Vector3i block_position, int block_size,
 		std::shared_ptr<PriorityDependency::ViewersData> &shared_viewers_data, const Transform3D &volume_transform) {
 	const Vector3i voxel_pos = get_block_center(block_position, block_size);
 	const float block_radius = block_size / 2;
@@ -1006,10 +940,10 @@ static void init_sparse_grid_priority_dependency(PriorityDependency &dep, Vector
 	dep.drop_distance_squared =
 			math::squared(shared_viewers_data->highest_view_distance + 2.f * transformed_block_radius);
 }
-static void request_block_load(VolumeID volume_id, std::shared_ptr<StreamingDependency> stream_dependency,
-		Vector3i block_pos, std::shared_ptr<PriorityDependency::ViewersData> &shared_viewers_data,
-		const Transform3D volume_transform, bool request_instances, BufferedTaskScheduler &scheduler, bool use_gpu,
-		const std::shared_ptr<VoxelData> &voxel_data) {
+
+void request_block_load(VolumeID volume_id, std::shared_ptr<StreamingDependency> stream_dependency, Vector3i block_pos,
+		std::shared_ptr<PriorityDependency::ViewersData> &shared_viewers_data, const Transform3D volume_transform,
+		BufferedTaskScheduler &scheduler, bool use_gpu, const std::shared_ptr<VoxelData> &voxel_data) {
 	ZN_ASSERT(stream_dependency != nullptr);
 
 	if (use_gpu && (stream_dependency->generator.is_null() || !stream_dependency->generator->supports_shaders())) {
@@ -1023,8 +957,9 @@ static void request_block_load(VolumeID volume_id, std::shared_ptr<StreamingDepe
 		init_sparse_grid_priority_dependency(
 				priority_dependency, block_pos, data_block_size, shared_viewers_data, volume_transform);
 
+		const bool request_instances = false;
 		LoadBlockDataTask *task = ZN_NEW(LoadBlockDataTask(volume_id, block_pos, 0, data_block_size, request_instances,
-				stream_dependency, priority_dependency, true, use_gpu, voxel_data));
+				stream_dependency, priority_dependency, true, use_gpu, voxel_data, TaskCancellationToken()));
 
 		scheduler.push_io_task(task);
 
@@ -1049,6 +984,8 @@ static void request_block_load(VolumeID volume_id, std::shared_ptr<StreamingDepe
 	}
 }
 
+} // namespace
+
 void VoxelCubeSphereTerrain::send_data_load_requests() {
 	ZN_PROFILE_SCOPE();
 
@@ -1063,39 +1000,62 @@ void VoxelCubeSphereTerrain::send_data_load_requests() {
 		// Blocks to load
 		for (size_t i = 0; i < _blocks_pending_load.size(); ++i) {
 			const Vector3i block_pos = _blocks_pending_load[i];
-			request_block_load(_volume_id, _streaming_dependency, block_pos, shared_viewers_data, volume_transform,
-					_instancer != nullptr, scheduler, _generator_use_gpu, _data);
+
+			auto saving_block_it = _unloaded_saving_blocks.find(block_pos);
+			const bool quick_reloading = saving_block_it != _unloaded_saving_blocks.end();
+
+			if (quick_reloading) {
+				ZN_PROFILE_SCOPE_NAMED("Quick reloading");
+				// The block is unloaded and currently waiting to be saved but we already want it back. This simulates a
+				// request and will complete on the next process.
+				// Ideally this shouldn't happen often. This is a corner case that occurs if the player moves fast
+				// back and forth or the task runner is overloaded.
+				std::shared_ptr<VoxelBuffer> voxel_data = make_shared_instance<VoxelBuffer>();
+				// Duplicating to make sure the saving version doesn't get altered by possible upcoming modifications.
+				saving_block_it->second->copy_to(*voxel_data, true);
+				_quick_reloading_blocks.push_back(QuickReloadingBlock{ voxel_data, block_pos });
+				// Don't erase it just yet, we may only do this once we know it is saved
+				// _unloaded_saving_blocks.erase(saving_block_it);
+
+				// Notes:
+				// Could we change the design so that saving tasks actually save a box of VoxelData?
+				// To do that we would have to NOT remove data blocks of which refcount becomes 0. Instead, ownership
+				// would sort of be given to a saving task. That task would make a copy of modified chunks and only then
+				// remove them if they still have 0 viewers.
+				// If a viewer moves back into the area, it would simply find the chunks again and no loading would be
+				// needed. If those chunks get modified while saving is underway, it would still work fine as the saving
+				// task would lock the saved regions for reading (which is currently a problem already, because no
+				// locking actually occurs!).
+
+			} else {
+				request_block_load(_volume_id, _streaming_dependency, block_pos, shared_viewers_data, volume_transform,
+						scheduler, _generator_use_gpu, _data);
+			}
 		}
 		scheduler.flush();
 		_blocks_pending_load.clear();
 	}
 }
 
-void VoxelCubeSphereTerrain::consume_block_data_save_requests(
-		BufferedTaskScheduler &task_scheduler, std::shared_ptr<AsyncDependencyTracker> saving_tracker) {
+void VoxelCubeSphereTerrain::consume_block_data_save_requests(BufferedTaskScheduler &task_scheduler,
+		std::shared_ptr<AsyncDependencyTracker> saving_tracker, bool with_flush) {
 	ZN_PROFILE_SCOPE();
 
 	// Blocks to save
 	if (get_stream().is_valid()) {
-		const uint8_t data_block_size = get_data_block_size();
 		for (const VoxelData::BlockToSave &b : _blocks_to_save) {
 			ZN_PRINT_VERBOSE(format("Requesting save of block {}", b.position));
 
 			SaveBlockDataTask *task = ZN_NEW(SaveBlockDataTask(
-					_volume_id, b.position, 0, data_block_size, b.voxels, _streaming_dependency, saving_tracker));
+					_volume_id, b.position, 0, b.voxels, _streaming_dependency, saving_tracker, with_flush));
 
-			// No priority data, saving doesnt need sorting
+			// No priority data, saving doesn't need sorting.
 			task_scheduler.push_io_task(task);
 		}
 	} else {
 		if (_blocks_to_save.size() > 0) {
 			ZN_PRINT_VERBOSE(format("Not saving {} blocks because no stream is assigned", _blocks_to_save.size()));
 		}
-	}
-
-	if (saving_tracker != nullptr) {
-		// Using buffered count instead of `_blocks_to_save` because it can also contain tasks from VoxelInstancer
-		saving_tracker->set_count(task_scheduler.get_io_count());
 	}
 
 	// print_line(String("Sending {0} block requests").format(varray(input.blocks_to_emerge.size())));
@@ -1113,19 +1073,6 @@ void VoxelCubeSphereTerrain::emit_data_block_loaded(Vector3i bpos) {
 	// const Variant vbuffer = block->voxels;
 	// const Variant *args[2] = { &vpos, &vbuffer };
 	emit_signal(VoxelStringNames::get_singleton().block_loaded, bpos);
-}
-
-void VoxelCubeSphereTerrain::emit_data_block_loading(Vector3i bpos) {
-	// Not sure about exposing buffers directly... some stuff on them is useful to obtain directly,
-	// but also it allows scripters to mess with voxels in a way they should not.
-	// Example: modifying voxels without locking them first, while another thread may be reading them at the same
-	// time. The same thing could happen the other way around (threaded task modifying voxels while you try to read
-	// them). It isn't planned to expose VoxelBuffer locks because there are too many of them, it may likely shift
-	// to another system in the future, and might even be changed to no longer inherit Reference. So unless this is
-	// absolutely necessary, buffers aren't exposed. Workaround: use VoxelTool
-	// const Variant vbuffer = block->voxels;
-	// const Variant *args[2] = { &vpos, &vbuffer };
-	emit_signal(VoxelStringNames::get_singleton().block_loading, bpos);
 }
 
 void VoxelCubeSphereTerrain::emit_data_block_unloaded(Vector3i bpos) {
@@ -1168,12 +1115,13 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 		return;
 	}
 	if (_data_block_enter_info_obj == nullptr) {
-		_data_block_enter_info_obj = gd_make_unique<VoxelDataBlockEnterInfo>();
+		_data_block_enter_info_obj = zylann::godot::make_unique<VoxelDataBlockEnterInfo>();
 	}
 	const int network_peer_id = VoxelEngine::get_singleton().get_viewer_network_peer_id(viewer_id);
 	_data_block_enter_info_obj->network_peer_id = network_peer_id;
 	_data_block_enter_info_obj->voxel_block = block;
 	_data_block_enter_info_obj->block_position = bpos;
+
 #if defined(ZN_GODOT)
 	if (!GDVIRTUAL_CALL(_on_data_block_entered, _data_block_enter_info_obj.get()) &&
 			_multiplayer_synchronizer == nullptr) {
@@ -1182,8 +1130,6 @@ void VoxelCubeSphereTerrain::notify_data_block_enter(const VoxelDataBlock &block
 #else
 	ERR_PRINT_ONCE("VoxelCubeSphereTerrain::_on_data_block_entered is not supported yet in GDExtension!");
 #endif
-	// println(format("VoxelCubeSphereTerrain::{} _on_data_block_entered bpos:: {}, {}, {}", String(get_path()), bpos.x, bpos.y,
-	// bpos.z));
 
 	if (_multiplayer_synchronizer != nullptr && !Engine::get_singleton()->is_editor_hint() &&
 			network_peer_id != MultiplayerPeer::TARGET_PEER_SERVER && _multiplayer_synchronizer->is_server()) {
@@ -1249,6 +1195,7 @@ Vector3i VoxelCubeSphereTerrain::convert_position_to_vox_position(Vector3 local_
 
 void VoxelCubeSphereTerrain::process() {
 	ZN_PROFILE_SCOPE();
+
 	if (get_generator_use_gpu()) {
 		Ref<VoxelGenerator> generator = get_generator();
 		if (generator.is_valid() && generator->supports_shaders() &&
@@ -1257,11 +1204,30 @@ void VoxelCubeSphereTerrain::process() {
 		}
 	}
 
+	{
+		for (const QuickReloadingBlock &qrb : _quick_reloading_blocks) {
+			VoxelEngine::BlockDataOutput ob{
+				VoxelEngine::BlockDataOutput::TYPE_LOADED, //
+				qrb.voxels, //
+				// TODO This doesn't work with VoxelInstancer because it unloads based on meshes...
+				nullptr, //
+				qrb.position, //
+				0, // lod_index
+				false, // dropped
+				false, // max_lod_hint
+				false, // initial_load
+				false, // had_instances
+				true // had_voxels
+			};
+			apply_data_block_response(ob);
+		}
+		_quick_reloading_blocks.clear();
+	}
+
 	process_viewers();
 	// process_received_data_blocks();
 	process_meshing();
 
-	
 #ifdef TOOLS_ENABLED
 	if (debug_is_draw_enabled() && is_visible_in_tree()) {
 		process_debug_draw();
@@ -1273,7 +1239,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 	ProfilingClock profiling_clock;
 
 	// Ordered by ascending index in paired viewers list
-	std::vector<size_t> unpaired_viewer_indexes;
+	StdVector<size_t> unpaired_viewer_indexes;
 
 	// Update viewers
 	{
@@ -1284,8 +1250,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 		for (size_t i = 0; i < _paired_viewers.size(); ++i) {
 			PairedViewer &p = _paired_viewers[i];
 			if (!VoxelEngine::get_singleton().viewer_exists(p.id)) {
-				ZN_PRINT_VERBOSE(format("Detected destroyed viewer {} in VoxelTerrain", p.id));
-
+				ZN_PRINT_VERBOSE(format("Detected destroyed viewer {} in VoxelCubeSphereTerrain", p.id));
 				// Interpret removal as nullified view distance so the same code handling loading of blocks
 				// will be used to unload those viewed by this viewer.
 				// We'll actually remove unpaired viewers in a second pass.
@@ -1336,7 +1301,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 					p.id = viewer_id;
 					paired_viewer_index = self._paired_viewers.size();
 					self._paired_viewers.push_back(p);
-					ZN_PRINT_VERBOSE(format("Pairing viewer {} to VoxelTerrain", viewer_id));
+					ZN_PRINT_VERBOSE(format("Pairing viewer {} to VoxelCubeSphereTerrain", viewer_id));
 				}
 
 				PairedViewer &paired_viewer = self._paired_viewers[paired_viewer_index];
@@ -1345,9 +1310,8 @@ void VoxelCubeSphereTerrain::process_viewers() {
 
 				const unsigned int view_distance_voxels =
 						static_cast<unsigned int>(static_cast<float>(viewer.view_distance) * view_distance_scale);
-
 				const Vector3 local_position = world_to_local_transform.xform(viewer.world_position);
-				
+
 				// convert local_position to unit cube position
 				double distance = local_position.length();
 				Vector3 direction = local_position.normalized();
@@ -1554,6 +1518,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 						});
 					});
 				}
+
 				// Blocks that remained within range of the viewer may need some changes too if viewer flags were
 				// modified. This operates on a DISTINCT set of blocks than the one above.
 
@@ -1595,8 +1560,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 		// Iterating backward so indexes of paired viewers that need removal will not change because of the removal
 		// itself
 		const size_t vi = unpaired_viewer_indexes[unpaired_viewer_indexes.size() - i - 1];
-
-		ZN_PRINT_VERBOSE(format("Unpairing viewer {} from VoxelTerrain", _paired_viewers[vi].id));
+		ZN_PRINT_VERBOSE(format("Unpairing viewer {} from VoxelCubeSphereTerrain", _paired_viewers[vi].id));
 		_paired_viewers[vi] = _paired_viewers.back();
 		_paired_viewers.pop_back();
 	}
@@ -1605,7 +1569,7 @@ void VoxelCubeSphereTerrain::process_viewers() {
 	if (can_load_blocks) {
 		send_data_load_requests();
 		BufferedTaskScheduler &task_scheduler = BufferedTaskScheduler::get_for_current_thread();
-		consume_block_data_save_requests(task_scheduler, nullptr);
+		consume_block_data_save_requests(task_scheduler, nullptr, false);
 		task_scheduler.flush();
 	}
 
@@ -1617,8 +1581,8 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 	ZN_PROFILE_SCOPE();
 	ZN_ASSERT_RETURN(prev_data_box != new_data_box);
 
-	static thread_local std::vector<Vector3i> tls_missing_blocks;
-	static thread_local std::vector<Vector3i> tls_found_blocks_positions;
+	static thread_local StdVector<Vector3i> tls_missing_blocks;
+	static thread_local StdVector<Vector3i> tls_found_blocks_positions;
 
 	Ref<VoxelGenerator> generator = get_generator();
 	if (generator.is_valid()) {
@@ -1626,6 +1590,9 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 	}
 
 	// Unview blocks that just fell out of range
+	//
+	// TODO Any reason to unview old blocks before viewing new blocks?
+	// Because if a viewer is removed and another is added, it will reload the whole area even if their box is the same.
 	{
 		const bool may_save =
 				get_stream().is_valid() && (!Engine::get_singleton()->is_editor_hint() || _run_stream_in_editor);
@@ -1633,15 +1600,26 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 		tls_missing_blocks.clear();
 		tls_found_blocks_positions.clear();
 
+		const unsigned int to_save_index0 = _blocks_to_save.size();
+
 		// Decrement refcounts from loaded blocks, and unload them
 		prev_data_box.difference(new_data_box, [this, may_save](Box3i out_of_range_box) {
-			_data->unview_area(out_of_range_box, tls_missing_blocks, tls_found_blocks_positions,
+			// ZN_PRINT_VERBOSE(format("Unview data box {}", out_of_range_box));
+			_data->unview_area(out_of_range_box, 0, &tls_found_blocks_positions, &tls_missing_blocks,
 					may_save ? &_blocks_to_save : nullptr);
 		});
+
+		// Temporarily store unloaded blocks in a map until saving completes
+		for (unsigned int i = to_save_index0; i < _blocks_to_save.size(); ++i) {
+			const VoxelData::BlockToSave &bts = _blocks_to_save[i];
+			_unloaded_saving_blocks[bts.position] = bts.voxels;
+		}
 
 		// Remove loading blocks (those were loaded and had their refcount reach zero)
 		for (const Vector3i bpos : tls_found_blocks_positions) {
 			emit_data_block_unloaded(bpos);
+			// TODO If they were loaded, why would they be in loading blocks?
+			// Probably in case we move so fast that blocks haven't even finished loading
 			_loading_blocks.erase(bpos);
 		}
 
@@ -1681,14 +1659,15 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 				VoxelEngine::get_singleton().viewer_exists(viewer_id) && // Could be a destroyed viewer
 				VoxelEngine::get_singleton().is_viewer_requiring_data_block_notifications(viewer_id);
 
-		static thread_local std::vector<VoxelDataBlock> tls_found_blocks;
+		static thread_local StdVector<VoxelDataBlock> tls_found_blocks;
 
 		tls_missing_blocks.clear();
 		tls_found_blocks.clear();
 		tls_found_blocks_positions.clear();
 
 		new_data_box.difference(prev_data_box, [this](Box3i box_to_load) {
-			_data->view_area(box_to_load, tls_missing_blocks, tls_found_blocks_positions, tls_found_blocks);
+			// ZN_PRINT_VERBOSE(format("View data box {}", box_to_load));
+			_data->view_area(box_to_load, 0, &tls_missing_blocks, &tls_found_blocks_positions, &tls_found_blocks);
 		});
 
 		// Schedule loading of missing blocks
@@ -1704,9 +1683,7 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 					new_loading_block.viewers_to_notify.push_back(viewer_id);
 				}
 
-				// Schedule a loading request
 				_loading_blocks.insert({ missing_bpos, new_loading_block });
-				emit_data_block_loading(missing_bpos);
 				_blocks_pending_load.push_back(missing_bpos);
 
 			} else {
@@ -1729,6 +1706,10 @@ void VoxelCubeSphereTerrain::process_viewer_data_box_change(
 			}
 		}
 
+		// Make sure to clear this because it holds refcounted stuff. If we don't, it could crash on exit because the
+		// voxel engine deinitializes its stuff before thread_locals get destroyed
+		tls_found_blocks.clear();
+
 		// TODO viewers with varying flags during the game is not supported at the moment.
 		// They have to be re-created, which may cause world re-load...
 	}
@@ -1742,6 +1723,16 @@ void VoxelCubeSphereTerrain::apply_data_block_response(VoxelEngine::BlockDataOut
 	if (ob.type == VoxelEngine::BlockDataOutput::TYPE_SAVED) {
 		if (ob.dropped) {
 			ERR_PRINT(String("Could not save block {0}").format(varray(ob.position)));
+
+		} else if (ob.had_voxels) {
+			// TODO What if the version that was saved is older than the one we cached here?
+			// For that to be a problem, you'd have to edit a chunk, move away, move back in, edit it again, move away,
+			// and have the first save complete before the second.
+			// But we may consider adding version numbers, which requires adding block metadata
+			_unloaded_saving_blocks.erase(ob.position);
+
+		} else if (ob.had_instances && _instancer != nullptr) {
+			_instancer->on_data_block_saved(ob.position, ob.lod_index);
 		}
 		return;
 	}
@@ -1785,7 +1776,7 @@ void VoxelCubeSphereTerrain::apply_data_block_response(VoxelEngine::BlockDataOut
 		_loading_blocks.erase(loading_block_it);
 	}
 
-	CRASH_COND(ob.voxels == nullptr);
+	ZN_ASSERT_RETURN(ob.voxels != nullptr);
 
 	VoxelDataBlock block(ob.voxels, ob.lod_index);
 	block.set_edited(ob.type == VoxelEngine::BlockDataOutput::TYPE_LOADED);
@@ -1831,15 +1822,15 @@ void VoxelCubeSphereTerrain::apply_data_block_response(VoxelEngine::BlockDataOut
 	// 	send_block_data_requests();
 	// }
 
-	if (_instancer != nullptr && ob.instances != nullptr) {
-		_instancer->on_data_block_loaded(ob.position, ob.lod_index, std::move(ob.instances));
-	}
+	// if (_instancer != nullptr && ob.instances != nullptr) {
+	// 	_instancer->on_data_block_loaded(ob.position, ob.lod_index, std::move(ob.instances));
+	// }
 }
 
 // Sets voxel data of a block, discarding existing data if any.
 // If the given block coordinates are not inside any viewer's area, this function won't do anything and return
 // false. If a block is already loading or generating at this position, it will be cancelled.
-bool VoxelCubeSphereTerrain::try_set_block_data(Vector3i position, std::shared_ptr<VoxelBufferInternal> &voxel_data) {
+bool VoxelCubeSphereTerrain::try_set_block_data(Vector3i position, std::shared_ptr<VoxelBuffer> &voxel_data) {
 	ZN_PROFILE_SCOPE();
 	ERR_FAIL_COND_V(voxel_data == nullptr, false);
 
@@ -1859,10 +1850,10 @@ bool VoxelCubeSphereTerrain::try_set_block_data(Vector3i position, std::shared_p
 	}
 
 	if (refcount.get() == 0) {
-		print_line(String("No paired viewers for received data {0}").format(varray(position)));
 		// Actually, this block is not even in range. So we may ignore it.
 		// If we don't want this behavior, we could introduce a fake viewer that adds a reference to all blocks in
 		// this volume as long as it is enabled?
+		ZN_PRINT_VERBOSE("Trying to set a data block outside of any viewer range");
 		return false;
 	}
 
@@ -1875,11 +1866,10 @@ bool VoxelCubeSphereTerrain::try_set_block_data(Vector3i position, std::shared_p
 	block.viewers = refcount;
 
 	// Create or update block data
-	_data->try_set_block(
-			position, block, [&block](VoxelDataBlock &existing_block, const VoxelDataBlock &incoming_block) {
-				existing_block.set_voxels(incoming_block.get_voxels_shared());
-				existing_block.set_edited(incoming_block.is_edited());
-			});
+	_data->try_set_block(position, block, [](VoxelDataBlock &existing_block, const VoxelDataBlock &incoming_block) {
+		existing_block.set_voxels(incoming_block.get_voxels_shared());
+		existing_block.set_edited(incoming_block.is_edited());
+	});
 
 	// The block itself might not be suitable for meshing yet, but blocks surrounding it might be now
 	try_schedule_mesh_update_from_data(
@@ -1936,7 +1926,6 @@ void VoxelCubeSphereTerrain::process_meshing() {
 		MeshBlockTask *task = ZN_NEW(MeshBlockTask);
 		task->volume_id = _volume_id;
 		task->mesh_block_position = mesh_block_pos;
-		task->mesh_block_position_offset = CalculatePositionOffset(mesh_block_pos * get_mesh_block_size());
 		task->lod_index = 0;
 		task->meshing_dependency = _meshing_dependency;
 		task->collision_hint = _generate_collisions;
@@ -1988,7 +1977,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 	VoxelMeshBlockVT *block = _mesh_map.get_block(ob.position);
 	if (block == nullptr) {
 		// print_line("- no longer loaded");
-		//  That block is no longer loaded, drop the result
+		// That block is no longer loaded, drop the result
 		++_stats.dropped_block_meshs;
 		return;
 	}
@@ -2008,7 +1997,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 	}
 
 	Ref<ArrayMesh> mesh;
-	std::vector<uint16_t> material_indices;
+	StdVector<uint16_t> material_indices;
 	if (ob.has_mesh_resource) {
 		// The mesh was already built as part of the threaded task
 		mesh = ob.mesh;
@@ -2062,6 +2051,7 @@ void VoxelCubeSphereTerrain::apply_mesh_update(const VoxelEngine::BlockMeshOutpu
 	}
 
 	block->set_visible(true);
+	block->set_collision_enabled(true);
 	block->set_parent_visible(is_visible());
 	block->set_parent_transform(get_global_transform());
 	// TODO We don't set MESH_UP_TO_DATE anywhere, but it seems to work?
@@ -2078,9 +2068,9 @@ Ref<VoxelTool> VoxelCubeSphereTerrain::get_voxel_tool() {
 	Ref<VoxelTool> vt = memnew(VoxelToolCubeSphereTerrain(this));
 	const int used_channels_mask = get_used_channels_mask();
 	// Auto-pick first used channel
-	for (int channel = 0; channel < VoxelBufferInternal::MAX_CHANNELS; ++channel) {
+	for (int channel = 0; channel < VoxelBuffer::MAX_CHANNELS; ++channel) {
 		if ((used_channels_mask & (1 << channel)) != 0) {
-			vt->set_channel(VoxelBufferInternal::ChannelId(channel));
+			vt->set_channel(VoxelBuffer::ChannelId(channel));
 			break;
 		}
 	}
@@ -2139,6 +2129,119 @@ Box3i VoxelCubeSphereTerrain::get_bounds() const {
 	return _data->get_bounds();
 }
 
+void VoxelCubeSphereTerrain::set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer) {
+	_multiplayer_synchronizer = synchronizer;
+}
+
+const VoxelCSTerrainMultiplayerSynchronizer *VoxelCubeSphereTerrain::get_multiplayer_synchronizer() const {
+	return _multiplayer_synchronizer;
+}
+
+bool VoxelCubeSphereTerrain::is_area_meshed(const Box3i &box_in_voxels) const {
+	// This assumes we store mesh blocks even when there is no mesh
+	const Box3i mesh_box = box_in_voxels.downscaled(get_mesh_block_size());
+	return mesh_box.all_cells_match([this](Vector3i bpos) {
+		const VoxelMeshBlockVT *block = _mesh_map.get_block(bpos);
+		return block != nullptr && block->is_loaded;
+	});
+}
+
+#ifdef TOOLS_ENABLED
+
+void VoxelCubeSphereTerrain::get_configuration_warnings(PackedStringArray &warnings) const {
+	VoxelNode::get_configuration_warnings(warnings);
+
+	if (get_generator_use_gpu()) {
+		Ref<VoxelGenerator> generator = get_generator();
+		if (generator.is_valid() && !generator->supports_shaders()) {
+			warnings.append(String("`use_gpu_generation` is enabled, but {0} does not support running on the GPU.")
+									.format(varray(generator->get_class())));
+		}
+	}
+
+	if (get_bounds().is_empty()) {
+		warnings.append(String("Terrain bounds have an empty size."));
+	}
+}
+
+#endif
+
+// DEBUG LAND
+
+void VoxelCubeSphereTerrain::debug_set_draw_enabled(bool enabled) {
+#ifdef TOOLS_ENABLED
+	_debug_draw_enabled = enabled;
+	if (_debug_draw_enabled) {
+		if (is_inside_tree()) {
+			_debug_renderer.set_world(is_visible_in_tree() ? *get_world_3d() : nullptr);
+		}
+	} else {
+		_debug_renderer.clear();
+		// _debug_mesh_update_items.clear();
+		// _debug_edit_items.clear();
+	}
+#endif
+}
+
+bool VoxelCubeSphereTerrain::debug_is_draw_enabled() const {
+#ifdef TOOLS_ENABLED
+	return _debug_draw_enabled;
+#else
+	return false;
+#endif
+}
+
+void VoxelCubeSphereTerrain::debug_set_draw_flag(DebugDrawFlag flag_index, bool enabled) {
+#ifdef TOOLS_ENABLED
+	ERR_FAIL_INDEX(flag_index, DEBUG_DRAW_FLAGS_COUNT);
+	if (enabled) {
+		_debug_draw_flags |= (1 << flag_index);
+	} else {
+		_debug_draw_flags &= ~(1 << flag_index);
+	}
+#endif
+}
+
+bool VoxelCubeSphereTerrain::debug_get_draw_flag(DebugDrawFlag flag_index) const {
+#ifdef TOOLS_ENABLED
+	ERR_FAIL_INDEX_V(flag_index, DEBUG_DRAW_FLAGS_COUNT, false);
+	return (_debug_draw_flags & (1 << flag_index)) != 0;
+#else
+	return false;
+#endif
+}
+
+#ifdef TOOLS_ENABLED
+
+void VoxelCubeSphereTerrain::process_debug_draw() {
+	ZN_PROFILE_SCOPE();
+
+	zylann::godot::DebugRenderer &dr = _debug_renderer;
+	dr.begin();
+
+	const Transform3D parent_transform = get_global_transform();
+
+	// Volume bounds
+	if (debug_get_draw_flag(DEBUG_DRAW_VOLUME_BOUNDS)) {
+		const Box3i bounds_in_voxels = get_bounds();
+		const float bounds_in_voxels_len = Vector3(bounds_in_voxels.size).length();
+
+		if (bounds_in_voxels_len < 10000) {
+			const Vector3 margin = Vector3(1, 1, 1) * bounds_in_voxels_len * 0.0025f;
+			const Vector3 size = bounds_in_voxels.size;
+			const Transform3D local_transform(
+					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.pos) - margin);
+			dr.draw_box(parent_transform * local_transform, zylann::godot::DebugColors::ID_VOXEL_BOUNDS);
+		}
+	}
+
+	dr.end();
+}
+
+#endif
+
+// BINDING LAND
+
 Vector3i VoxelCubeSphereTerrain::_b_voxel_to_data_block(Vector3 pos) const {
 	return _data->voxel_to_block(math::floor_to_int(pos));
 }
@@ -2154,7 +2257,7 @@ Ref<VoxelSaveCompletionTracker> VoxelCubeSphereTerrain::_b_save_modified_blocks(
 	return VoxelSaveCompletionTracker::create(tracker);
 }
 
-// Explicitely ask to save a block if it was modified
+// Explicitly ask to save a block if it was modified
 void VoxelCubeSphereTerrain::_b_save_block(Vector3i p_block_pos) {
 	VoxelData::BlockToSave to_save;
 	if (_data->consume_block_modifications(p_block_pos, to_save)) {
@@ -2172,17 +2275,18 @@ AABB VoxelCubeSphereTerrain::_b_get_bounds() const {
 	return AABB(b.pos, b.size);
 }
 
-bool VoxelCubeSphereTerrain::_b_try_set_block_data(Vector3i position, Ref<gd::VoxelBuffer> voxel_data) {
+bool VoxelCubeSphereTerrain::_b_try_set_block_data(Vector3i position, Ref<godot::VoxelBuffer> voxel_data) {
 	ERR_FAIL_COND_V(voxel_data.is_null(), false);
-	std::shared_ptr<VoxelBufferInternal> buffer = voxel_data->get_buffer_shared();
+	std::shared_ptr<VoxelBuffer> buffer = voxel_data->get_buffer_shared();
 
 #ifdef DEBUG_ENABLED
+	// It is not allowed to call this function at two different positions with the same voxel buffer
 	const StringName &key = VoxelStringNames::get_singleton()._voxel_debug_vt_position;
 	if (voxel_data->has_meta(key)) {
 		const Vector3i meta_pos = voxel_data->get_meta(key);
 		ERR_FAIL_COND_V_MSG(meta_pos != position, false,
 				String("Setting the same {0} at different positions is not supported")
-						.format(varray(gd::VoxelBuffer::get_class_static())));
+						.format(varray(godot::VoxelBuffer::get_class_static())));
 	} else {
 		voxel_data->set_meta(key, position);
 	}
@@ -2193,8 +2297,8 @@ bool VoxelCubeSphereTerrain::_b_try_set_block_data(Vector3i position, Ref<gd::Vo
 
 PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
 		Vector3i area_origin, Vector3i area_size) const {
-	static thread_local std::vector<ViewerID> s_ids;
-	std::vector<ViewerID> &viewer_ids = s_ids;
+	static thread_local StdVector<ViewerID> s_ids;
+	StdVector<ViewerID> &viewer_ids = s_ids;
 	viewer_ids.clear();
 	get_viewers_in_area(viewer_ids, Box3i(area_origin, area_size));
 
@@ -2212,8 +2316,11 @@ PackedInt32Array VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area(
 	return peer_ids;
 }
 
-void VoxelCubeSphereTerrain::_bind_methods() {
+bool VoxelCubeSphereTerrain::_b_is_area_meshed(AABB aabb) const {
+	return is_area_meshed(Box3i(aabb.position, aabb.size));
+}
 
+void VoxelCubeSphereTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_material_override", "material"), &VoxelCubeSphereTerrain::set_material_override);
 	ClassDB::bind_method(D_METHOD("get_material_override"), &VoxelCubeSphereTerrain::get_material_override);
 
@@ -2252,11 +2359,6 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_mesh_block_size"), &VoxelCubeSphereTerrain::get_mesh_block_size);
 	ClassDB::bind_method(D_METHOD("set_mesh_block_size", "size"), &VoxelCubeSphereTerrain::set_mesh_block_size);
 
-	ClassDB::bind_method(D_METHOD("convert_position_to_vox_position", "local_position"),
-			&VoxelCubeSphereTerrain::convert_position_to_vox_position);
-	ClassDB::bind_method(D_METHOD("convert_block_pos_to_local_position", "local_position"),
-			&VoxelCubeSphereTerrain::convert_block_pos_to_local_position);
-
 	ClassDB::bind_method(D_METHOD("get_statistics"), &VoxelCubeSphereTerrain::_b_get_statistics);
 	ClassDB::bind_method(D_METHOD("get_voxel_tool"), &VoxelCubeSphereTerrain::get_voxel_tool);
 
@@ -2274,6 +2376,7 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_generator_use_gpu", "enable"), &VoxelCubeSphereTerrain::set_generator_use_gpu);
 	ClassDB::bind_method(D_METHOD("get_generator_use_gpu"), &VoxelCubeSphereTerrain::get_generator_use_gpu);
+
 	// TODO Rename `_voxel_bounds`
 	ClassDB::bind_method(D_METHOD("set_bounds"), &VoxelCubeSphereTerrain::_b_set_bounds);
 	ClassDB::bind_method(D_METHOD("get_bounds"), &VoxelCubeSphereTerrain::_b_get_bounds);
@@ -2285,6 +2388,14 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 			&VoxelCubeSphereTerrain::_b_get_viewer_network_peer_ids_in_area);
 
 	ClassDB::bind_method(D_METHOD("has_data_block", "block_position"), &VoxelCubeSphereTerrain::has_data_block);
+	ClassDB::bind_method(D_METHOD("is_area_meshed", "area_in_voxels"), &VoxelCubeSphereTerrain::_b_is_area_meshed);
+
+	ClassDB::bind_method(
+			D_METHOD("debug_set_draw_enabled", "enabled"), &VoxelCubeSphereTerrain::debug_set_draw_enabled);
+	ClassDB::bind_method(D_METHOD("debug_is_draw_enabled"), &VoxelCubeSphereTerrain::debug_is_draw_enabled);
+	ClassDB::bind_method(
+			D_METHOD("debug_set_draw_flag", "flag_index", "enabled"), &VoxelCubeSphereTerrain::debug_set_draw_flag);
+	ClassDB::bind_method(D_METHOD("debug_get_draw_flag", "flag_index"), &VoxelCubeSphereTerrain::debug_get_draw_flag);
 
 #ifdef ZN_GODOT
 	GDVIRTUAL_BIND(_on_data_block_entered, "info");
@@ -2333,10 +2444,25 @@ void VoxelCubeSphereTerrain::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mesh_block_size"), "set_mesh_block_size", "get_mesh_block_size");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_gpu_generation"), "set_generator_use_gpu", "get_generator_use_gpu");
 
+	ADD_GROUP("Debug Drawing", "debug_");
+
+	// Debug drawing is not persistent
+
+	BIND_ENUM_CONSTANT(DEBUG_DRAW_VOLUME_BOUNDS);
+	BIND_ENUM_CONSTANT(DEBUG_DRAW_FLAGS_COUNT);
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_draw_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR),
+			"debug_set_draw_enabled", "debug_is_draw_enabled");
+
+#define ADD_DEBUG_DRAW_FLAG(m_name, m_flag)                                                                            \
+	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, m_name, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR),                  \
+			"debug_set_draw_flag", "debug_get_draw_flag", m_flag);
+
+	ADD_DEBUG_DRAW_FLAG("debug_draw_volume_bounds", DEBUG_DRAW_VOLUME_BOUNDS);
+
 	// TODO Add back access to block, but with an API securing multithreaded access
-	ADD_SIGNAL(MethodInfo("block_loading", PropertyInfo(Variant::VECTOR3, "position")));
-	ADD_SIGNAL(MethodInfo("block_loaded", PropertyInfo(Variant::VECTOR3, "position")));
-	ADD_SIGNAL(MethodInfo("block_unloaded", PropertyInfo(Variant::VECTOR3, "position")));
+	ADD_SIGNAL(MethodInfo("block_loaded", PropertyInfo(Variant::VECTOR3I, "position")));
+	ADD_SIGNAL(MethodInfo("block_unloaded", PropertyInfo(Variant::VECTOR3I, "position")));
 
 	ADD_SIGNAL(MethodInfo("mesh_block_entered", PropertyInfo(Variant::VECTOR3I, "position")));
 	ADD_SIGNAL(MethodInfo("mesh_block_exited", PropertyInfo(Variant::VECTOR3I, "position")));

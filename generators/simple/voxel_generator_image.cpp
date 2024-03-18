@@ -2,6 +2,7 @@
 #include "../../util/containers/fixed_array.h"
 #include "../../util/containers/span.h"
 #include "../../util/math/conv.h"
+#include "../../util/godot/classes/image.h"
 
 namespace zylann::voxel {
 
@@ -87,7 +88,7 @@ Vector2 VoxelGeneratorImage::get_mapping_max() const {
 }
 
 VoxelGenerator::Result VoxelGeneratorImage::generate_block(VoxelGenerator::VoxelQueryData &input) {
-	VoxelBufferInternal &out_buffer = input.voxel_buffer;
+	VoxelBuffer &out_buffer = input.voxel_buffer;
 
 	Parameters params;
 	{

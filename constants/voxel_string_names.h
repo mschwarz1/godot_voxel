@@ -48,6 +48,7 @@ public:
 	StringName u_voxel_virtual_texture_fade;
 	StringName u_voxel_virtual_texture_tile_size;
 	StringName u_voxel_virtual_texture_offset_scale;
+	StringName u_voxel_lod_info;
 
 	StringName viewer_fully_loaded;
 
@@ -105,6 +106,8 @@ public:
 
 	StringName _on_async_search_completed;
 	StringName async_search_completed;
+
+	StringName file_selected;
 };
 
 } // namespace zylann::voxel

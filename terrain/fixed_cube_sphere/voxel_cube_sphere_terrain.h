@@ -4,16 +4,21 @@
 #include "../../constants/voxel_constants.h"
 #include "../../engine/meshing_dependency.h"
 #include "../../storage/voxel_data.h"
+#include "../../util/containers/std_unordered_map.h"
+#include "../../util/containers/std_vector.h"
 #include "../../util/godot/memory.h"
 #include "../../util/math/box3i.h"
 #include "../voxel_data_block_enter_info.h"
 #include "../voxel_mesh_map.h"
 #include "../fixed_lod/voxel_terrain.h"
 #include "../fixed_lod/voxel_mesh_block_vt.h"
+#include "../voxel_node.h"
+#include "voxel_cs_terrain_multiplayer_synchronizer.h"
 
 #ifdef TOOLS_ENABLED
 #include "../../editor/voxel_debug.h"
 #endif
+
 namespace zylann {
 
 class AsyncDependencyTracker;
@@ -24,6 +29,7 @@ class VoxelTool;
 class VoxelInstancer;
 class VoxelSaveCompletionTracker;
 class VoxelCSTerrainMultiplayerSynchronizer;
+class BufferedTaskScheduler;
 
 // Infinite paged terrain made of voxel blocks all with the same level of detail.
 // Voxels are polygonized around the viewer by distance in a large cubic space.
@@ -56,7 +62,7 @@ public:
 	inline unsigned int get_data_block_size() const {
 		return 1 << get_data_block_size_pow2();
 	}
-	//void set_data_block_size_po2(unsigned int p_block_size_po2);
+	// void set_data_block_size_po2(unsigned int p_block_size_po2);
 
 	unsigned int get_mesh_block_size_pow2() const;
 	inline unsigned int get_mesh_block_size() const {
@@ -81,8 +87,8 @@ public:
 	void set_collision_margin(float margin);
 	float get_collision_margin() const;
 
-	unsigned int get_max_view_distance() const;
-	void set_max_view_distance(unsigned int distance_in_voxels);
+	int get_max_view_distance() const;
+	void set_max_view_distance(int distance_in_voxels);
 
 	void set_block_enter_notification_enabled(bool enable);
 	bool is_block_enter_notification_enabled() const;
@@ -93,12 +99,11 @@ public:
 	void set_automatic_loading_enabled(bool enable);
 	bool is_automatic_loading_enabled() const;
 
-	void set_generator_use_gpu(bool enabled);
-	bool get_generator_use_gpu() const;
-
-
 	void set_material_override(Ref<Material> material);
 	Ref<Material> get_material_override() const;
+
+	void set_generator_use_gpu(bool enabled);
+	bool get_generator_use_gpu() const;
 
 	VoxelData &get_storage() const {
 		ZN_ASSERT(_data != nullptr);
@@ -114,7 +119,7 @@ public:
 	// Creates or overrides whatever block data there is at the given position.
 	// The use case is multiplayer, client-side.
 	// If no local viewer is actually in range, the data will not be applied and the function returns `false`.
-	bool try_set_block_data(Vector3i position, std::shared_ptr<VoxelBufferInternal> &voxel_data);
+	bool try_set_block_data(Vector3i position, std::shared_ptr<VoxelBuffer> &voxel_data);
 
 	bool has_data_block(Vector3i position) const;
 
@@ -145,7 +150,7 @@ public:
 	const Stats &get_stats() const;
 
 	// struct BlockToSave {
-	// 	std::shared_ptr<VoxelBufferInternal> voxels;
+	// 	std::shared_ptr<VoxelBuffer> voxels;
 	// 	Vector3i position;
 	// };
 
@@ -166,18 +171,7 @@ public:
 	// Internal
 
 	void set_instancer(VoxelInstancer *instancer);
-	void get_meshed_block_positions(std::vector<Vector3i> &out_positions) const;
-	void get_meshed_block_offsets(std::vector<Vector3d> &out_offsets) const;
-	void get_viewers_in_area(std::vector<ViewerID> &out_viewer_ids, Box3i voxel_box) const;
-	
-	void set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer);
-	const VoxelCSTerrainMultiplayerSynchronizer *get_multiplayer_synchronizer() const;
-
-#ifdef TOOLS_ENABLED
-	void get_configuration_warnings(PackedStringArray &warnings) const override;
-#endif // TOOLS_ENABLED
-	
-
+	void get_meshed_block_positions(StdVector<Vector3i> &out_positions) const;
 	Array get_mesh_block_surface(Vector3i block_pos) const;
 
 	VolumeID get_volume_id() const override {
@@ -188,29 +182,41 @@ public:
 		return _streaming_dependency;
 	}
 
+	void get_viewers_in_area(StdVector<ViewerID> &out_viewer_ids, Box3i voxel_box) const;
+
+	void set_multiplayer_synchronizer(VoxelCSTerrainMultiplayerSynchronizer *synchronizer);
+	const VoxelCSTerrainMultiplayerSynchronizer *get_multiplayer_synchronizer() const;
+
+#ifdef TOOLS_ENABLED
+	void get_configuration_warnings(PackedStringArray &warnings) const override;
+#endif // TOOLS_ENABLED
+
 protected:
 	void _notification(int p_what);
 
 	void _on_gi_mode_changed() override;
+	void _on_shadow_casting_changed() override;
+	void _on_render_layers_mask_changed() override;
 
 private:
 	void process();
 	void process_viewers();
 	void process_viewer_data_box_change(
 			ViewerID viewer_id, Box3i prev_data_box, Box3i new_data_box, bool can_load_blocks);
-	//void process_received_data_blocks();
+	// void process_received_data_blocks();
 	void process_meshing();
 	void apply_mesh_update(const VoxelEngine::BlockMeshOutput &ob);
 	void apply_data_block_response(VoxelEngine::BlockDataOutput &ob);
 
 	void _on_stream_params_changed();
 	// void _set_block_size_po2(int p_block_size_po2);
-	//void make_all_view_dirty();
+	// void make_all_view_dirty();
 	void start_updater();
 	void stop_updater();
 	void start_streamer();
 	void stop_streamer();
 	void reset_map();
+	void clear_mesh_map();
 
 	// void view_data_block(Vector3i bpos, uint32_t viewer_id, bool require_notification);
 	void view_mesh_block(Vector3i bpos, bool mesh_flag, bool collision_flag);
@@ -218,24 +224,27 @@ private:
 	void unview_mesh_block(Vector3i bpos, bool mesh_flag, bool collision_flag);
 	// void unload_data_block(Vector3i bpos);
 	void unload_mesh_block(Vector3i bpos);
-	//void make_data_block_dirty(Vector3i bpos);
+	// void make_data_block_dirty(Vector3i bpos);
 	void try_schedule_mesh_update(VoxelMeshBlockVT &block);
 	void try_schedule_mesh_update_from_data(const Box3i &box_in_voxels);
 
 	void save_all_modified_blocks(bool with_copy, std::shared_ptr<AsyncDependencyTracker> tracker);
 	void get_viewer_pos_and_direction(Vector3 &out_pos, Vector3 &out_direction) const;
 	void send_data_load_requests();
-	void consume_block_data_save_requests(
-			BufferedTaskScheduler &task_scheduler, std::shared_ptr<AsyncDependencyTracker> saving_tracker);
-
-	void emit_data_block_loading(Vector3i bpos);
+	void consume_block_data_save_requests(BufferedTaskScheduler &task_scheduler,
+			std::shared_ptr<AsyncDependencyTracker> saving_tracker, bool with_flush);
+	void get_meshed_block_offsets(std::vector<Vector3d> &out_offsets) const;
 	void emit_data_block_loaded(Vector3i bpos);
 	void emit_data_block_unloaded(Vector3i bpos);
+
 	void emit_mesh_block_entered(Vector3i bpos);
 	void emit_mesh_block_exited(Vector3i bpos);
+
 	bool try_get_paired_viewer_index(ViewerID id, size_t &out_i) const;
 
 	void notify_data_block_enter(const VoxelDataBlock &block, Vector3i bpos, ViewerID viewer_id);
+
+	bool is_area_meshed(const Box3i &box_in_voxels) const;
 
 #ifdef TOOLS_ENABLED
 	void process_debug_draw();
@@ -258,14 +267,17 @@ private:
 	// Bindings
 	Vector3i _b_voxel_to_data_block(Vector3 pos) const;
 	Vector3i _b_data_block_to_voxel(Vector3i pos) const;
-	//void _force_load_blocks_binding(Vector3 center, Vector3 extents) { force_load_blocks(center, extents); }
+	// void _force_load_blocks_binding(Vector3 center, Vector3 extents) { force_load_blocks(center, extents); }
 	Ref<VoxelSaveCompletionTracker> _b_save_modified_blocks();
 	void _b_save_block(Vector3i p_block_pos);
 	void _b_set_bounds(AABB aabb);
 	AABB _b_get_bounds() const;
-	bool _b_try_set_block_data(Vector3i position, Ref<gd::VoxelBuffer> voxel_data);
+	bool _b_try_set_block_data(Vector3i position, Ref<godot::VoxelBuffer> voxel_data);
 	Dictionary _b_get_statistics() const;
 	PackedInt32Array _b_get_viewer_network_peer_ids_in_area(Vector3i area_origin, Vector3i area_size) const;
+	void _b_rpc_receive_block(PackedByteArray data);
+	void _b_rpc_receive_area(PackedByteArray data);
+	bool _b_is_area_meshed(AABB aabb) const;
 
 	VolumeID _volume_id;
 
@@ -278,14 +290,14 @@ private:
 			int view_distance_voxels = 0;
 			bool requires_collisions = false;
 			bool requires_meshes = false;
-			bool requires_signal = false;
+			int destructCount = 0;
 		};
 		ViewerID id;
 		State state;
 		State prev_state;
 	};
 
-	std::vector<PairedViewer> _paired_viewers;
+	StdVector<PairedViewer> _paired_viewers;
 
 	// Voxel storage. Using a shared_ptr so threaded tasks can use it safely.
 	std::shared_ptr<VoxelData> _data;
@@ -302,20 +314,30 @@ private:
 	struct LoadingBlock {
 		RefCount viewers;
 		// TODO Optimize allocations here
-		std::vector<ViewerID> viewers_to_notify;
+		StdVector<ViewerID> viewers_to_notify;
 	};
 
 	// Blocks currently being loaded.
-	std::unordered_map<Vector3i, LoadingBlock> _loading_blocks;
+	StdUnorderedMap<Vector3i, LoadingBlock> _loading_blocks;
 	// Blocks that should be loaded on the next process call.
 	// The order in that list does not matter.
-	std::vector<Vector3i> _blocks_pending_load;
+	StdVector<Vector3i> _blocks_pending_load;
 	// Block meshes that should be updated on the next process call.
 	// The order in that list does not matter.
-	std::vector<Vector3i> _blocks_pending_update;
+	StdVector<Vector3i> _blocks_pending_update;
 	// Blocks that should be saved on the next process call.
 	// The order in that list does not matter.
-	std::vector<VoxelData::BlockToSave> _blocks_to_save;
+	StdVector<VoxelData::BlockToSave> _blocks_to_save;
+	// Data blocks that have been unloaded and needed saving. They are temporarily stored here until saving completes,
+	// and is checked first before loading new blocks. This is in case players leave an area and come back to it faster
+	// than saving, because otherwise loading from stream would return an outdated version.
+	StdUnorderedMap<Vector3i, std::shared_ptr<VoxelBuffer>> _unloaded_saving_blocks;
+	// List of data blocks that will be used to simulate a loading response on the next process call.
+	struct QuickReloadingBlock {
+		std::shared_ptr<VoxelBuffer> voxels;
+		Vector3i position;
+	};
+	StdVector<QuickReloadingBlock> _quick_reloading_blocks;
 
 	Ref<VoxelMesher> _mesher;
 
@@ -329,7 +351,7 @@ private:
 	unsigned int _collision_mask = 1;
 	float _collision_margin = constants::DEFAULT_COLLISION_MARGIN;
 	bool _run_stream_in_editor = true;
-	//bool _stream_enabled = false;
+	// bool _stream_enabled = false;
 	bool _block_enter_notification_enabled = false;
 	bool _area_edit_notification_enabled = false;
 	// If enabled, VoxelViewers will cause blocks to automatically load around them.
@@ -338,8 +360,9 @@ private:
 
 	Ref<Material> _material_override;
 
-	GodotObjectUniquePtr<VoxelDataBlockEnterInfo> _data_block_enter_info_obj;
+	zylann::godot::ObjectUniquePtr<VoxelDataBlockEnterInfo> _data_block_enter_info_obj;
 
+	// References to external nodes.
 	VoxelInstancer *_instancer = nullptr;
 	VoxelCSTerrainMultiplayerSynchronizer *_multiplayer_synchronizer = nullptr;
 
@@ -349,11 +372,13 @@ private:
 	bool _debug_draw_enabled = false;
 	uint8_t _debug_draw_flags = 0;
 
-	DebugRenderer _debug_renderer;
+	zylann::godot::DebugRenderer _debug_renderer;
 #endif
 };
 
 } // namespace voxel
 } // namespace zylann
 
-#endif // VOXEL_CUBE_SPHERE_TERRAIN_H
+VARIANT_ENUM_CAST(zylann::voxel::VoxelCubeSphereTerrain::DebugDrawFlag)
+
+#endif // VOXEL_TERRAIN_H
