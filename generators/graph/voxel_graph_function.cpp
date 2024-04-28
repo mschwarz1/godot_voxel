@@ -3,10 +3,9 @@
 #include "../../util/containers/container_funcs.h"
 #include "../../util/godot/classes/object.h"
 #include "../../util/godot/core/array.h" // for `varray` in GDExtension builds
-#include "../../util/godot/core/callable.h"
 #include "../../util/godot/core/packed_arrays.h"
 #include "../../util/profiling.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #include "node_type_db.h"
 
 #include <algorithm>
@@ -725,14 +724,14 @@ const ProgramGraph &VoxelGraphFunction::get_graph() const {
 
 void VoxelGraphFunction::register_subresource(Resource &resource) {
 	// print_line(String("{0}: Registering subresource {1}").format(varray(int64_t(this), int64_t(&resource))));
-	resource.connect(VoxelStringNames::get_singleton().changed,
-			ZN_GODOT_CALLABLE_MP(this, VoxelGraphFunction, _on_subresource_changed));
+	resource.connect(
+			VoxelStringNames::get_singleton().changed, callable_mp(this, &VoxelGraphFunction::_on_subresource_changed));
 }
 
 void VoxelGraphFunction::unregister_subresource(Resource &resource) {
 	// print_line(String("{0}: Unregistering subresource {1}").format(varray(int64_t(this), int64_t(&resource))));
-	resource.disconnect(VoxelStringNames::get_singleton().changed,
-			ZN_GODOT_CALLABLE_MP(this, VoxelGraphFunction, _on_subresource_changed));
+	resource.disconnect(
+			VoxelStringNames::get_singleton().changed, callable_mp(this, &VoxelGraphFunction::_on_subresource_changed));
 }
 
 void VoxelGraphFunction::register_subresources() {
@@ -1707,10 +1706,6 @@ void VoxelGraphFunction::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("paste_graph_with_pre_generated_ids", "graph", "node_ids", "gui_offset"),
 			&VoxelGraphFunction::_b_paste_graph_with_pre_generated_ids);
 
-#ifdef ZN_GODOT_EXTENSION
-	ClassDB::bind_method(D_METHOD("_on_subresource_changed"), &VoxelGraphFunction::_on_subresource_changed);
-#endif
-
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "graph_data", PROPERTY_HINT_NONE, "",
 						 PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL),
 			"_set_graph_data", "_get_graph_data");
@@ -1768,10 +1763,6 @@ void VoxelGraphFunction::_bind_methods() {
 	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_GRADIENT_2D);
 	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_GRADIENT_3D);
 	BIND_ENUM_CONSTANT(NODE_OUTPUT_WEIGHT);
-#ifdef VOXEL_ENABLE_FAST_NOISE_2
-	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_2_2D);
-	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_2_3D);
-#endif
 	BIND_ENUM_CONSTANT(NODE_OUTPUT_SINGLE_TEXTURE);
 	BIND_ENUM_CONSTANT(NODE_EXPRESSION);
 	BIND_ENUM_CONSTANT(NODE_POWI);
@@ -1783,6 +1774,10 @@ void VoxelGraphFunction::_bind_methods() {
 	BIND_ENUM_CONSTANT(NODE_SPOTS_2D);
 	BIND_ENUM_CONSTANT(NODE_SPOTS_3D);
 	BIND_ENUM_CONSTANT(NODE_TYPE_COUNT);
+#ifdef VOXEL_ENABLE_FAST_NOISE_2
+	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_2_2D);
+	BIND_ENUM_CONSTANT(NODE_FAST_NOISE_2_3D);
+#endif
 }
 
 } // namespace zylann::voxel::pg

@@ -1,13 +1,12 @@
 #include "voxel_generator_graph.h"
 #include "../../constants/voxel_string_names.h"
+#include "../../storage/materials_4i4w.h"
 #include "../../storage/voxel_buffer.h"
 #include "../../util/containers/container_funcs.h"
-#include "../../util/expression_parser.h"
 #include "../../util/godot/classes/engine.h"
 #include "../../util/godot/classes/image.h"
 #include "../../util/godot/classes/object.h"
 #include "../../util/godot/core/array.h"
-#include "../../util/godot/core/callable.h"
 #include "../../util/godot/core/string.h"
 #include "../../util/hash_funcs.h"
 #include "../../util/io/log.h"
@@ -15,7 +14,8 @@
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
 #include "../../util/profiling_clock.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/expression_parser.h"
+#include "../../util/string/format.h"
 #include "node_type_db.h"
 #include "voxel_graph_function.h"
 
@@ -26,7 +26,7 @@ const char *VoxelGeneratorGraph::SIGNAL_NODE_NAME_CHANGED = "node_name_changed";
 VoxelGeneratorGraph::VoxelGeneratorGraph() {
 	_main_function.instantiate();
 	_main_function->connect(VoxelStringNames::get_singleton().changed,
-			ZN_GODOT_CALLABLE_MP(this, VoxelGeneratorGraph, _on_subresource_changed));
+			callable_mp(this, &VoxelGeneratorGraph::_on_subresource_changed));
 }
 
 VoxelGeneratorGraph::~VoxelGeneratorGraph() {
@@ -426,7 +426,7 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 	const int stride = 1 << input.lod;
 
 	// Clip threshold must be higher for higher lod indexes because distances for one sampled voxel are also larger
-	const float clip_threshold = sdf_scale * _sdf_clip_threshold * stride;
+	const float clip_threshold = _sdf_clip_threshold * stride;
 
 	// Block size must be a multiple of section size, as all sections must have the same size
 	const bool can_use_subdivision =
@@ -453,15 +453,12 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 	Span<float> y_cache = to_span(cache.y_cache);
 	Span<float> z_cache = to_span(cache.z_cache);
 
-	const float air_sdf = _debug_clipped_blocks ? -1.f : 1.f;
-	const float matter_sdf = _debug_clipped_blocks ? 1.f : -1.f;
+	const float air_sdf = _debug_clipped_blocks ? constants::SDF_FAR_INSIDE : constants::SDF_FAR_OUTSIDE;
+	const float matter_sdf = _debug_clipped_blocks ? constants::SDF_FAR_OUTSIDE : constants::SDF_FAR_INSIDE;
 
 	FixedArray<uint8_t, 4> spare_texture_indices = runtime_ptr->spare_texture_indices;
 	const int sdf_output_buffer_index = runtime_ptr->sdf_output_buffer_index;
 	const int type_output_buffer_index = runtime_ptr->type_output_buffer_index;
-
-	FixedArray<unsigned int, pg::Runtime::MAX_OUTPUTS> required_outputs;
-	unsigned int required_outputs_count = 0;
 
 	bool all_sdf_is_air = (sdf_output_buffer_index != -1) && (type_output_buffer_index == -1);
 	bool all_sdf_is_matter = all_sdf_is_air;
@@ -505,10 +502,12 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 					runtime.analyze_range(cache.state, range_inputs.get());
 				}
 
+				SmallVector<unsigned int, pg::Runtime::MAX_OUTPUTS> required_outputs;
+
 				bool sdf_is_air = true;
 				bool sdf_is_uniform = true;
 				if (sdf_output_buffer_index != -1) {
-					const math::Interval sdf_range = cache.state.get_range(sdf_output_buffer_index) * sdf_scale;
+					const math::Interval sdf_range = cache.state.get_range(sdf_output_buffer_index);
 					bool sdf_is_matter = false;
 
 					if (sdf_range.min > clip_threshold && sdf_range.max > clip_threshold) {
@@ -527,8 +526,7 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 
 					} else {
 						// SDF is not uniform, we'll need to compute it per voxel
-						required_outputs[required_outputs_count] = runtime_ptr->sdf_output_index;
-						++required_outputs_count;
+						required_outputs.push_back(runtime_ptr->sdf_output_index);
 						sdf_is_air = false;
 						sdf_is_uniform = false;
 					}
@@ -545,8 +543,7 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 						type_is_uniform = true;
 					} else {
 						// Types are not uniform, we'll need to compute them per voxel
-						required_outputs[required_outputs_count] = runtime_ptr->type_output_index;
-						++required_outputs_count;
+						required_outputs.push_back(runtime_ptr->type_output_index);
 					}
 				}
 
@@ -554,8 +551,7 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 					// We can skip this when SDF is air because there won't be any matter to give a texture to
 					// TODO Range analysis on that?
 					for (unsigned int i = 0; i < runtime_ptr->weight_outputs_count; ++i) {
-						required_outputs[required_outputs_count] = runtime_ptr->weight_output_indices[i];
-						++required_outputs_count;
+						required_outputs.push_back(runtime_ptr->weight_output_indices[i]);
 					}
 				}
 
@@ -577,12 +573,11 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 						out_buffer.fill_area(encoded_weights, rmin, rmax, VoxelBuffer::CHANNEL_WEIGHTS);
 						single_texture_is_uniform = true;
 					} else {
-						required_outputs[required_outputs_count] = runtime_ptr->single_texture_output_index;
-						++required_outputs_count;
+						required_outputs.push_back(runtime_ptr->single_texture_output_index);
 					}
 				}
 
-				if (required_outputs_count == 0) {
+				if (required_outputs.size() == 0) {
 					// We found all we need with range analysis, no need to calculate per voxel.
 					continue;
 				}
@@ -590,8 +585,8 @@ VoxelGenerator::Result VoxelGeneratorGraph::generate_block(VoxelGenerator::Voxel
 				// At least one channel needs per-voxel computation.
 
 				if (_use_optimized_execution_map) {
-					runtime.generate_optimized_execution_map(cache.state, cache.optimized_execution_map,
-							to_span_const(required_outputs, required_outputs_count), false);
+					runtime.generate_optimized_execution_map(
+							cache.state, cache.optimized_execution_map, to_span(required_outputs), false);
 				}
 
 				{
@@ -726,8 +721,8 @@ bool VoxelGeneratorGraph::generate_broad_block(VoxelGenerator::VoxelQueryData &i
 	pg::Runtime &runtime = runtime_ptr->runtime;
 	runtime.prepare_state(cache.state, 1, false);
 
-	const float air_sdf = _debug_clipped_blocks ? -1.f : 1.f;
-	const float matter_sdf = _debug_clipped_blocks ? 1.f : -1.f;
+	const float air_sdf = _debug_clipped_blocks ? constants::SDF_FAR_INSIDE : constants::SDF_FAR_OUTSIDE;
+	const float matter_sdf = _debug_clipped_blocks ? constants::SDF_FAR_OUTSIDE : constants::SDF_FAR_INSIDE;
 
 	const int sdf_output_buffer_index = runtime_ptr->sdf_output_buffer_index;
 	const int type_output_buffer_index = runtime_ptr->type_output_buffer_index;
@@ -983,7 +978,7 @@ pg::CompilationResult VoxelGeneratorGraph::compile(bool debug) {
 			}
 		};
 		SortArray<WeightOutput, WeightOutputComparer> sorter;
-		CRASH_COND(r->weight_outputs_count >= r->weight_outputs.size());
+		ZN_ASSERT(r->weight_outputs_count <= r->weight_outputs.size());
 		sorter.sort(r->weight_outputs.data(), r->weight_outputs_count);
 	}
 
@@ -992,8 +987,11 @@ pg::CompilationResult VoxelGeneratorGraph::compile(bool debug) {
 		FixedArray<bool, 16> used_indices_map;
 		FixedArray<uint8_t, 4> spare_indices;
 		fill(used_indices_map, false);
+		unsigned int used_indices_count = 0;
 		for (unsigned int i = 0; i < r->weight_outputs.size(); ++i) {
-			used_indices_map[r->weight_outputs[i].layer_index] = true;
+			const unsigned int layer_index = r->weight_outputs[i].layer_index;
+			used_indices_count += static_cast<unsigned int>(!used_indices_map[layer_index]);
+			used_indices_map[layer_index] = true;
 		}
 		unsigned int spare_indices_count = 0;
 		for (unsigned int i = 0; i < used_indices_map.size() && spare_indices_count < 4; ++i) {
@@ -1003,7 +1001,9 @@ pg::CompilationResult VoxelGeneratorGraph::compile(bool debug) {
 			}
 		}
 		// debug_check_texture_indices(spare_indices);
-		ERR_FAIL_COND_V(spare_indices_count != 4, pg::CompilationResult());
+		const unsigned int expected_spare_indices_count =
+				math::min(spare_indices.size(), used_indices_map.size() - used_indices_count);
+		ZN_ASSERT_RETURN_V(spare_indices_count == expected_spare_indices_count, pg::CompilationResult());
 		r->spare_texture_indices = spare_indices;
 	}
 
@@ -1081,7 +1081,7 @@ void VoxelGeneratorGraph::generate_series(Span<const float> positions_x, Span<co
 	switch (channel) {
 		case VoxelBuffer::CHANNEL_SDF:
 			buffer_index = runtime_ptr->sdf_output_buffer_index;
-			defval = 1.f;
+			defval = VoxelBuffer::get_default_value_static(channel);
 			break;
 		case VoxelBuffer::CHANNEL_TYPE:
 			buffer_index = runtime_ptr->type_output_buffer_index;
@@ -1849,10 +1849,6 @@ void VoxelGeneratorGraph::_bind_methods() {
 
 #ifdef TOOLS_ENABLED
 	ClassDB::bind_method(D_METHOD("_dummy_function"), &VoxelGeneratorGraph::_b_dummy_function);
-#endif
-
-#ifdef ZN_GODOT_EXTENSION
-	ClassDB::bind_method(D_METHOD("_on_subresource_changed"), &VoxelGeneratorGraph::_on_subresource_changed);
 #endif
 
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "graph_data", PROPERTY_HINT_NONE, "",

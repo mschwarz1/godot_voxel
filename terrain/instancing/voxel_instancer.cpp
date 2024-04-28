@@ -16,7 +16,7 @@
 #include "../../util/godot/core/array.h"
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 //#include "../fixed_cube_sphere/voxel_cube_sphere_terrain.h"
 #include "../fixed_lod/voxel_terrain.h"
 #include "../variable_lod/voxel_lod_terrain.h"
@@ -340,7 +340,7 @@ void VoxelInstancer::process_gizmos() {
 			const Transform3D box_transform(
 					parent_transform.basis * (Basis().scaled(Vector3(block_size, block_size, block_size))),
 					parent_transform.xform(block_local_pos));
-			dr.draw_box_mm(box_transform, color);
+			dr.draw_box(box_transform, color);
 		}
 	};
 

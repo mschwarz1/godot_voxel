@@ -1,9 +1,10 @@
 #include "voxel_engine_gd.h"
+#include "../constants/version.gen.h"
 #include "../constants/voxel_string_names.h"
 #include "../storage/voxel_memory_pool.h"
 #include "../util/godot/classes/project_settings.h"
 #include "../util/godot/classes/rendering_server.h"
-#include "../util/godot/core/callable.h"
+#include "../util/godot/core/packed_arrays.h"
 #include "../util/macros.h"
 #include "../util/profiling.h"
 #include "../util/tasks/godot/threaded_task_gd.h"
@@ -64,8 +65,20 @@ VoxelEngine::VoxelEngine() {
 #ifdef ZN_PROFILER_ENABLED
 	CRASH_COND(RenderingServer::get_singleton() == nullptr);
 	RenderingServer::get_singleton()->connect(VoxelStringNames::get_singleton().frame_post_draw,
-			ZN_GODOT_CALLABLE_MP(this, VoxelEngine, _on_rendering_server_frame_post_draw));
+			callable_mp(this, &VoxelEngine::_on_rendering_server_frame_post_draw));
 #endif
+}
+
+int VoxelEngine::get_version_major() const {
+	return VOXEL_VERSION_MAJOR;
+}
+
+int VoxelEngine::get_version_minor() const {
+	return VOXEL_VERSION_MINOR;
+}
+
+int VoxelEngine::get_version_patch() const {
+	return VOXEL_VERSION_PATCH;
 }
 
 Dictionary to_dict(const zylann::voxel::VoxelEngine::Stats::ThreadPoolStats &stats) {
@@ -74,12 +87,15 @@ Dictionary to_dict(const zylann::voxel::VoxelEngine::Stats::ThreadPoolStats &sta
 	d["active_threads"] = stats.active_threads;
 	d["thread_count"] = stats.thread_count;
 
-	Array task_names;
-	task_names.resize(stats.thread_count);
-	for (unsigned int i = 0; i < stats.active_task_names.size(); ++i) {
-		const char *name = stats.active_task_names[i];
-		if (name != nullptr) {
-			task_names[i] = name;
+	PackedStringArray task_names;
+	{
+		task_names.resize(stats.thread_count);
+		Span<String> task_names_s = to_span(task_names);
+		for (unsigned int i = 0; i < stats.active_task_names.size(); ++i) {
+			const char *name = stats.active_task_names[i];
+			if (name != nullptr) {
+				task_names_s[i] = name;
+			}
 		}
 	}
 
@@ -103,6 +119,17 @@ Dictionary to_dict(const zylann::voxel::VoxelEngine::Stats &stats) {
 	mem["voxel_total"] = ZN_SIZE_T_TO_VARIANT(VoxelMemoryPool::get_singleton().debug_get_total_memory());
 	mem["voxel_used"] = ZN_SIZE_T_TO_VARIANT(VoxelMemoryPool::get_singleton().debug_get_used_memory());
 	mem["block_count"] = VoxelMemoryPool::get_singleton().debug_get_used_blocks();
+#ifdef DEBUG_ENABLED
+	const uint64_t std_allocated = static_cast<int64_t>(StdDefaultAllocatorCounters::g_allocated);
+	const uint64_t std_deallocated = static_cast<int64_t>(StdDefaultAllocatorCounters::g_deallocated);
+	mem["std_allocated"] = std_allocated;
+	mem["std_deallocated"] = std_deallocated;
+	mem["std_current"] = std_allocated - std_deallocated;
+#else
+	mem["std_allocated"] = -1;
+	mem["std_deallocated"] = -1;
+	mem["std_current"] = -1;
+#endif
 
 	Dictionary d;
 	d["thread_pools"] = pools;
@@ -146,11 +173,10 @@ Vector3 VoxelEngine::get_editor_camera_direction() const {
 #endif
 
 void VoxelEngine::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_version_major"), &VoxelEngine::get_version_major);
+	ClassDB::bind_method(D_METHOD("get_version_minor"), &VoxelEngine::get_version_minor);
+	ClassDB::bind_method(D_METHOD("get_version_patch"), &VoxelEngine::get_version_patch);
 	ClassDB::bind_method(D_METHOD("get_stats"), &VoxelEngine::get_stats);
-#ifdef ZN_GODOT_EXTENSION
-	ClassDB::bind_method(
-			D_METHOD("_on_rendering_server_frame_post_draw"), &VoxelEngine::_on_rendering_server_frame_post_draw);
-#endif
 }
 
 } // namespace zylann::voxel::godot

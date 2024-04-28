@@ -8,7 +8,7 @@
 #include "../../meshers/blocky/voxel_mesher_blocky.h"
 #include "../../meshers/transvoxel/voxel_mesher_transvoxel.h"
 #include "../../scene/3d/navigation_region_3d.h"
-#include "../../scene/resources/navigation_mesh_source_geometry_data_3d.h"
+#include "../../scene/resources/3d/navigation_mesh_source_geometry_data_3d.h"
 #include "../../servers/navigation_server_3d.h"
 #include "../../storage/voxel_buffer_gd.h"
 #include "../../streams/load_all_blocks_data_task.h"
@@ -31,7 +31,7 @@
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
 #include "../../util/profiling_clock.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #include "../../util/tasks/async_dependency_tracker.h"
 #include "../../util/thread/mutex.h"
 #include "../../util/thread/rw_lock.h"
@@ -83,28 +83,6 @@ void copy_vlt_block_params(ShaderMaterial &src, ShaderMaterial &dst) {
 }
 
 } // namespace
-
-void ShaderMaterialPoolVLT::recycle(Ref<ShaderMaterial> material) {
-	ZN_PROFILE_SCOPE();
-	ZN_ASSERT_RETURN(material.is_valid());
-
-	const VoxelStringNames &sn = VoxelStringNames::get_singleton();
-
-	// Reset textures to avoid hoarding them in the pool
-	material->set_shader_parameter(sn.u_voxel_normalmap_atlas, Ref<Texture2D>());
-	material->set_shader_parameter(sn.u_voxel_cell_lookup, Ref<Texture2D>());
-	material->set_shader_parameter(sn.u_voxel_virtual_texture_offset_scale, Vector4(0, 0, 0, 1));
-	// TODO Would be nice if we repurposed `u_transition_mask` to store extra flags.
-	// Here we exploit cell_size==0 as "there is no virtual normalmaps on this block"
-	material->set_shader_parameter(sn.u_lod_val, 0);
-	material->set_shader_parameter(sn.u_voxel_cell_size, 0.f);
-	material->set_shader_parameter(sn.u_voxel_virtual_texture_fade, 0.f);
-
-	material->set_shader_parameter(sn.u_transition_mask, 0);
-	material->set_shader_parameter(sn.u_lod_fade, Vector2(0.0, 0.0));
-
-	zylann::godot::ShaderMaterialPool::recycle(material);
-}
 
 void VoxelLodTerrain::ApplyMeshUpdateTask::run(TimeSpreadTaskContext &ctx) {
 	if (!VoxelEngine::get_singleton().is_volume_valid(volume_id)) {
@@ -3203,7 +3181,7 @@ void VoxelLodTerrain::_b_set_voxel_bounds(AABB aabb) {
 
 AABB VoxelLodTerrain::_b_get_voxel_bounds() const {
 	const Box3i b = get_voxel_bounds();
-	return AABB(b.pos, b.size);
+	return AABB(b.position, b.size);
 }
 
 // DEBUG LAND
@@ -3480,7 +3458,7 @@ void VoxelLodTerrain::update_gizmos() {
 		for (auto it = state.octree_streaming.lod_octrees.begin(); it != state.octree_streaming.lod_octrees.end();
 				++it) {
 			const Transform3D local_transform(local_octree_basis, it->first * octree_size);
-			dr.draw_box(parent_transform * local_transform, DebugColors::ID_OCTREE_BOUNDS);
+			dr.draw_box(parent_transform * local_transform, Color(0.5, 0.5, 0.5));
 		}
 	}
 
@@ -3493,8 +3471,8 @@ void VoxelLodTerrain::update_gizmos() {
 			const Vector3 margin = Vector3(1, 1, 1) * bounds_in_voxels_len * 0.0025f;
 			const Vector3 size = bounds_in_voxels.size;
 			const Transform3D local_transform(
-					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.pos) - margin);
-			dr.draw_box(parent_transform * local_transform, DebugColors::ID_VOXEL_BOUNDS);
+					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.position) - margin);
+			dr.draw_box(parent_transform * local_transform, Color(1, 1, 1));
 		}
 	}
 
@@ -3520,7 +3498,7 @@ void VoxelLodTerrain::update_gizmos() {
 				// Squaring because lower lod indexes are more interesting to see, so we give them more contrast.
 				// Also this might be better with sRGB?
 				const float g = math::squared(math::max(1.f - float(lod_index) / lod_count_f, 0.f));
-				dr.draw_box_mm(t, Color8(255, uint8_t(g * 254.f), 0, 255));
+				dr.draw_box(t, Color8(255, uint8_t(g * 254.f), 0, 255));
 			});
 		}
 	}
@@ -3542,7 +3520,7 @@ void VoxelLodTerrain::update_gizmos() {
 					// Squaring because lower lod indexes are more interesting to see, so we give them more contrast.
 					// Also this might be better with sRGB?
 					const float g = math::squared(math::max(1.f - float(lod_index) / lod_count_f, 0.f));
-					dr.draw_box_mm(t, Color8(255, uint8_t(g * 254.f), 0, 255));
+					dr.draw_box(t, Color8(255, uint8_t(g * 254.f), 0, 255));
 				}
 			}
 		}
@@ -3570,7 +3548,7 @@ void VoxelLodTerrain::update_gizmos() {
 				const Transform3D local_transform(
 						Basis().scaled(Vector3(lod_block_size, lod_block_size, lod_block_size)), voxel_pos);
 				const Transform3D t = parent_transform * local_transform;
-				dr.draw_box_mm(t, color);
+				dr.draw_box(t, color);
 			});
 		}
 	}
@@ -3596,7 +3574,7 @@ void VoxelLodTerrain::update_gizmos() {
 				const Transform3D local_transform(
 						Basis().scaled(Vector3(lod_block_size, lod_block_size, lod_block_size)), voxel_pos);
 				const Transform3D t = parent_transform * local_transform;
-				dr.draw_box_mm(t, color);
+				dr.draw_box(t, color);
 			});
 		}
 	}
@@ -3609,11 +3587,11 @@ void VoxelLodTerrain::update_gizmos() {
 			for (unsigned int lod_index = 0; lod_index < lod_count; ++lod_index) {
 				const int lod_mesh_block_size = mesh_block_size << lod_index;
 				const Box3i box = paired_viewer.state.mesh_box_per_lod[lod_index];
-				const Transform3D lt(Basis().scaled(Vector3(box.size * lod_mesh_block_size)),
-						Vector3(box.pos * lod_mesh_block_size));
+				const Transform3D lt(Basis().scaled(to_vec3(box.size * lod_mesh_block_size)),
+						to_vec3(box.position * lod_mesh_block_size));
 				const Transform3D t = parent_transform * lt;
 				const float g = math::squared(math::max(1.f - float(lod_index) / lod_count_f, 0.f));
-				dr.draw_box_mm(t, Color8(uint8_t(g * 254.f), 32, 255, 255));
+				dr.draw_box(t, Color8(uint8_t(g * 254.f), 32, 255, 255));
 			}
 		}
 	}
@@ -3631,7 +3609,7 @@ void VoxelLodTerrain::update_gizmos() {
 						const Transform3D local_transform(basis, bpos * data_block_size);
 						const Transform3D t = parent_transform * local_transform;
 						const Color8 c = block.is_modified() ? Color8(255, 255, 0, 255) : Color8(0, 255, 0, 255);
-						dr.draw_box_mm(t, c);
+						dr.draw_box(t, c);
 					}
 				},
 				_edited_blocks_gizmos_lod_index);
@@ -3648,7 +3626,7 @@ void VoxelLodTerrain::update_gizmos() {
 
 		const Color color = math::lerp(
 				Color(0, 0, 0), Color(0, 1, 1), item.remaining_frames / float(DebugMeshUpdateItem::LINGER_FRAMES));
-		dr.draw_box_mm(t, Color8(color));
+		dr.draw_box(t, Color8(color));
 
 		--item.remaining_frames;
 		if (item.remaining_frames == 0) {
@@ -3662,13 +3640,14 @@ void VoxelLodTerrain::update_gizmos() {
 	for (unsigned int i = 0; i < _debug_edit_items.size();) {
 		DebugEditItem &item = _debug_edit_items[i];
 
-		const Transform3D local_transform(Basis().scaled(to_vec3(item.voxel_box.size)), to_vec3(item.voxel_box.pos));
+		const Transform3D local_transform(
+				Basis().scaled(to_vec3(item.voxel_box.size)), to_vec3(item.voxel_box.position));
 
 		const Transform3D t = parent_transform * local_transform;
 
 		const Color color = math::lerp(
 				Color(0, 0, 0), Color(1, 1, 0), item.remaining_frames / float(DebugMeshUpdateItem::LINGER_FRAMES));
-		dr.draw_box_mm(t, Color8(color));
+		dr.draw_box(t, Color8(color));
 
 		--item.remaining_frames;
 		if (item.remaining_frames == 0) {
@@ -3685,7 +3664,7 @@ void VoxelLodTerrain::update_gizmos() {
 		modifiers.for_each_modifier([&dr](const VoxelModifier &modifier) {
 			const AABB aabb = modifier.get_aabb();
 			const Transform3D t(Basis().scaled(aabb.size), aabb.get_center() - aabb.size * 0.5);
-			dr.draw_box_mm(t, Color8(0, 0, 255, 255));
+			dr.draw_box(t, Color8(0, 0, 255, 255));
 		});
 	}
 
@@ -3709,13 +3688,13 @@ Array VoxelLodTerrain::_b_debug_print_sdf_top_down(Vector3i center, Vector3i ext
 			continue;
 		}
 
-		VoxelBuffer buffer;
+		VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 		buffer.create(world_box.size);
 
 		world_box.for_each_cell([world_box, &buffer, &voxel_data](const Vector3i &world_pos) {
-			const Vector3i rpos = world_pos - world_box.pos;
+			const Vector3i rpos = world_pos - world_box.position;
 			VoxelSingleValue v;
-			v.f = 1.f;
+			v.f = constants::SDF_FAR_OUTSIDE;
 			v = voxel_data.get_voxel(world_pos, VoxelBuffer::CHANNEL_SDF, v);
 			buffer.set_voxel_f(v.f, rpos.x, rpos.y, rpos.z, VoxelBuffer::CHANNEL_SDF);
 		});

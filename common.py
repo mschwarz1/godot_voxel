@@ -27,7 +27,7 @@ def get_sources(env, is_editor_build):
 
         "meshers/blocky/*.cpp",
         "meshers/blocky/types/*.cpp",
-        "meshers/cubeSphere/*.cpp",
+        #"meshers/cubeSphere/*.cpp",
         "meshers/transvoxel/*.cpp",
         "meshers/dmc/*.cpp",
         "meshers/cubes/*.cpp",
@@ -39,6 +39,7 @@ def get_sources(env, is_editor_build):
         "streams/vox/*.cpp",
 
         "storage/*.cpp",
+        "storage/metadata/*.cpp",
 
         "generators/*.cpp",
         "generators/graph/*.cpp",
@@ -68,9 +69,11 @@ def get_sources(env, is_editor_build):
         "util/*.cpp",
         "util/containers/*.cpp",
         "util/math/*.cpp",
+        "util/memory/*.cpp",
         "util/noise/fast_noise_lite/*.cpp",
         "util/noise/gd_noise_range.cpp",
         "util/noise/spot_noise_gd.cpp",
+        "util/string/*.cpp",
         "util/thread/thread.cpp",
         "util/thread/spatial_lock_2d.cpp",
         "util/thread/spatial_lock_3d.cpp",
@@ -99,6 +102,7 @@ def get_sources(env, is_editor_build):
         "util/godot/direct_mesh_instance.cpp",
         "util/godot/direct_multimesh_instance.cpp",
         "util/godot/direct_static_body.cpp",
+        "util/godot/file_utils.cpp",
         "util/godot/shader_material_pool.cpp",
 
         "util/io/*.cpp",
@@ -124,6 +128,8 @@ def get_sources(env, is_editor_build):
             "editor/blocky_library/*.cpp",
             "editor/blocky_library/types/*.cpp",
             "editor/multipass/*.cpp",
+
+            "util/godot/debug_renderer.cpp",
 
             "util/godot/classes/editor_plugin.cpp",
             "util/godot/classes/editor_import_plugin.cpp",

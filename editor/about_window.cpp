@@ -1,5 +1,6 @@
 #include "about_window.h"
 #include "../constants/version.gen.h"
+#include "../util/containers/container_funcs.h"
 #include "../util/godot/classes/button.h"
 #include "../util/godot/classes/h_box_container.h"
 #include "../util/godot/classes/h_split_container.h"
@@ -10,10 +11,8 @@
 #include "../util/godot/classes/texture_rect.h"
 #include "../util/godot/classes/v_box_container.h"
 #include "../util/godot/core/array.h"
-#include "../util/godot/core/callable.h"
 #include "../util/godot/core/string.h"
 #include "../util/godot/editor_scale.h"
-#include "../util/macros.h"
 
 namespace zylann::voxel {
 
@@ -149,7 +148,7 @@ const ThirdParty g_third_parties[] = {
 			"The contents of this file are protected by copyright and may not be publicly\n"
 			"reproduced without permission.\n" }
 };
-const unsigned int VOXEL_THIRD_PARTY_COUNT = ZN_ARRAY_LENGTH(g_third_parties);
+const unsigned int VOXEL_THIRD_PARTY_COUNT = count_of(g_third_parties);
 
 VoxelAboutWindow *g_window_singleton = nullptr;
 
@@ -241,7 +240,8 @@ VoxelAboutWindow::VoxelAboutWindow() {
 						"OrbitalHare\n"
 						"matthewhilton (Matthew Hilton)\n"
 						"SummitCollie\n"
-						"nulshift";
+						"nulshift\n"
+						"ddel-rio (Daniel del Río Román)";
 	{
 		Dictionary d;
 
@@ -262,7 +262,7 @@ VoxelAboutWindow::VoxelAboutWindow() {
 	rich_text_label->set_text(about_text);
 	rich_text_label->set_selection_enabled(true);
 	rich_text_label->connect(
-			"meta_clicked", ZN_GODOT_CALLABLE_MP(this, VoxelAboutWindow, _on_about_rich_text_label_meta_clicked));
+			"meta_clicked", callable_mp(this, &VoxelAboutWindow::_on_about_rich_text_label_meta_clicked));
 
 	tab_container->add_child(rich_text_label);
 
@@ -305,7 +305,7 @@ VoxelAboutWindow::VoxelAboutWindow() {
 		}
 
 		third_party_list->connect(
-				"item_selected", ZN_GODOT_CALLABLE_MP(this, VoxelAboutWindow, _on_third_party_list_item_selected));
+				"item_selected", callable_mp(this, &VoxelAboutWindow::_on_third_party_list_item_selected));
 
 		_third_party_rich_text_label = memnew(RichTextLabel);
 		_third_party_rich_text_label->set_selection_enabled(true);
@@ -348,13 +348,6 @@ void VoxelAboutWindow::_on_third_party_list_item_selected(int index) {
 			String("{0}\n------------------------------\n{1}").format(varray(third_party.name, third_party.license)));
 }
 
-void VoxelAboutWindow::_bind_methods() {
-#ifdef ZN_GODOT_EXTENSION
-	ClassDB::bind_method(D_METHOD("_on_about_rich_text_label_meta_clicked", "meta"),
-			&VoxelAboutWindow::_on_about_rich_text_label_meta_clicked);
-	ClassDB::bind_method(D_METHOD("_on_third_party_list_item_selected", "meta"),
-			&VoxelAboutWindow::_on_third_party_list_item_selected);
-#endif
-}
+void VoxelAboutWindow::_bind_methods() {}
 
 } // namespace zylann::voxel

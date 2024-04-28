@@ -1,14 +1,20 @@
 #include "test_voxel_graph.h"
+#include "../../generators/graph/image_range_grid.h"
 #include "../../generators/graph/node_type_db.h"
+#include "../../generators/graph/range_utility.h"
 #include "../../generators/graph/voxel_generator_graph.h"
+#include "../../storage/materials_4i4w.h"
 #include "../../storage/voxel_buffer.h"
 #include "../../util/containers/container_funcs.h"
 #include "../../util/containers/std_vector.h"
+#include "../../util/godot/classes/fast_noise_lite.h"
+#include "../../util/godot/classes/image.h"
+#include "../../util/godot/core/random_pcg.h"
 #include "../../util/math/conv.h"
 #include "../../util/math/sdf.h"
 #include "../../util/noise/fast_noise_lite/fast_noise_lite.h"
-#include "../../util/std_string.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
+#include "../../util/string/std_string.h"
 #include "../testing.h"
 #include "test_util.h"
 #include <sstream>
@@ -16,9 +22,6 @@
 #ifdef VOXEL_ENABLE_FAST_NOISE_2
 #include "../../util/noise/fast_noise_2.h"
 #endif
-
-#include <core/io/resource_loader.h>
-#include <modules/noise/fastnoise_lite.h>
 
 namespace zylann::voxel::tests {
 
@@ -55,10 +58,10 @@ bool check_graph_results_are_equal(VoxelGeneratorGraph &generator1, VoxelGenerat
 
 	const Vector3i block_size(16, 16, 16);
 
-	VoxelBuffer block1;
+	VoxelBuffer block1(VoxelBuffer::ALLOCATOR_DEFAULT);
 	block1.create(block_size);
 
-	VoxelBuffer block2;
+	VoxelBuffer block2(VoxelBuffer::ALLOCATOR_DEFAULT);
 	block2.create(block_size);
 
 	// Note, not every graph configuration can be considered invalid when inequal.
@@ -509,7 +512,7 @@ void test_voxel_graph_generator_texturing() {
 				ERR_FAIL_COND(generator.is_null());
 				{
 					// Block centered on origin
-					VoxelBuffer buffer;
+					VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 					buffer.create(Vector3i(16, 16, 16));
 
 					VoxelGenerator::VoxelQueryData query{ buffer, -buffer.get_size() / 2, 0 };
@@ -523,7 +526,7 @@ void test_voxel_graph_generator_texturing() {
 					// The point is to check possible bugs due to optimizations.
 
 					// Below 0
-					VoxelBuffer buffer0;
+					VoxelBuffer buffer0(VoxelBuffer::ALLOCATOR_DEFAULT);
 					{
 						buffer0.create(Vector3i(16, 16, 16));
 						VoxelGenerator::VoxelQueryData query{ buffer0, Vector3i(0, -16, 0), 0 };
@@ -531,7 +534,7 @@ void test_voxel_graph_generator_texturing() {
 					}
 
 					// Above 0
-					VoxelBuffer buffer1;
+					VoxelBuffer buffer1(VoxelBuffer::ALLOCATOR_DEFAULT);
 					{
 						buffer1.create(Vector3i(16, 16, 16));
 						VoxelGenerator::VoxelQueryData query{ buffer1, Vector3i(0, 0, 0), 0 };
@@ -644,7 +647,7 @@ void print_sdf_as_ascii(const VoxelBuffer &vb) {
 	Vector3i pos;
 	const VoxelBuffer::ChannelId channel = VoxelBuffer::CHANNEL_SDF;
 	for (pos.y = 0; pos.y < vb.get_size().y; ++pos.y) {
-		println(format("Y = {}", pos.y));
+		print_line(format("Y = {}", pos.y));
 		for (pos.z = 0; pos.z < vb.get_size().z; ++pos.z) {
 			// Prints two views of the same row side by side
 			StdStringStream ss;
@@ -677,7 +680,7 @@ void print_sdf_as_ascii(const VoxelBuffer &vb) {
 			}
 			ss << " | ";
 			ss << ss2.str();
-			println(ss.str());
+			print_line(ss.str());
 		}
 	}
 }
@@ -732,23 +735,22 @@ void test_voxel_graph_generate_block_with_input_sdf() {
 							.format(varray(compilation_result.node_id, compilation_result.message)));
 
 			// Create buffer containing part of a sphere
-			VoxelBuffer buffer;
+			VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 			buffer.create(Vector3i(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
 			const VoxelBuffer::ChannelId channel = VoxelBuffer::CHANNEL_SDF;
 			const VoxelBuffer::Depth depth = buffer.get_channel_depth(channel);
-			const float sd_scale = VoxelBuffer::get_sdf_quantization_scale(depth);
 			for (int z = 0; z < buffer.get_size().z; ++z) {
 				for (int x = 0; x < buffer.get_size().x; ++x) {
 					for (int y = 0; y < buffer.get_size().y; ++y) {
 						// Sphere at origin
 						const float sd = math::sdf_sphere(Vector3(x, y, z), Vector3(), SPHERE_RADIUS);
-						buffer.set_voxel_f(sd * sd_scale, Vector3i(x, y, z), channel);
+						buffer.set_voxel_f(sd, Vector3i(x, y, z), channel);
 					}
 				}
 			}
 
 			// Make a backup before running the generator
-			VoxelBuffer buffer_before;
+			VoxelBuffer buffer_before(VoxelBuffer::ALLOCATOR_DEFAULT);
 			buffer_before.create(buffer.get_size());
 			buffer_before.copy_channels_from(buffer);
 
@@ -1229,7 +1231,7 @@ void test_voxel_graph_fuzzing() {
 	}
 
 	// print_line("--- End of zone with possible errors ---");
-	print_line(String("Successful random compiles: {0}/{1}").format(varray(successful_compiles_count, attempts)));
+	print_line(format("Successful random compiles: {}/{}", successful_compiles_count, attempts));
 }
 
 void test_voxel_graph_sphere_on_plane() {
@@ -1440,7 +1442,7 @@ void test_voxel_graph_unused_single_texture_output() {
 		sorter.sort(block_positions.data(), block_positions.size());
 	}
 
-	VoxelBuffer voxels;
+	VoxelBuffer voxels(VoxelBuffer::ALLOCATOR_DEFAULT);
 	const int BLOCK_SIZE = 16;
 	const int MIN_MARGIN = 1;
 	const int MAX_MARGIN = 2;
@@ -1682,16 +1684,16 @@ void test_voxel_graph_spots2d_optimized_execution_map() {
 				}
 				s += "\n";
 			}
-			println(format("Indices and weights at Y={}:", y));
-			println(s);
+			print_line(format("Indices and weights at Y={}:", y));
+			print_line(s);
 		}
 	};
 
 	const int BLOCK_SIZE = 16;
 
-	VoxelBuffer voxels1;
+	VoxelBuffer voxels1(VoxelBuffer::ALLOCATOR_DEFAULT);
 	voxels1.create(Vector3iUtil::create(BLOCK_SIZE));
-	VoxelBuffer voxels2;
+	VoxelBuffer voxels2(VoxelBuffer::ALLOCATOR_DEFAULT);
 	voxels2.create(Vector3iUtil::create(BLOCK_SIZE));
 
 	// First do a run without the optimization
@@ -1708,9 +1710,9 @@ void test_voxel_graph_spots2d_optimized_execution_map() {
 		ZN_TEST_ASSERT(L::has_spot(voxels2) == false);
 	}
 
-	VoxelBuffer voxels3;
+	VoxelBuffer voxels3(VoxelBuffer::ALLOCATOR_DEFAULT);
 	voxels3.create(Vector3iUtil::create(BLOCK_SIZE));
-	VoxelBuffer voxels4;
+	VoxelBuffer voxels4(VoxelBuffer::ALLOCATOR_DEFAULT);
 	voxels4.create(Vector3iUtil::create(BLOCK_SIZE));
 
 	// Now do a run with the optimization, results must be the same
@@ -1918,7 +1920,7 @@ void test_voxel_graph_image() {
 			CompilationResult result = generator->compile(true);
 			ZN_TEST_ASSERT(result.success);
 
-			generator->debug_analyze_range(box.pos, box.pos + box.size, true);
+			generator->debug_analyze_range(box.position, box.position + box.size, true);
 
 			uint32_t image_output_address;
 			ZN_TEST_ASSERT(generator->try_get_output_port_address(
@@ -1932,7 +1934,7 @@ void test_voxel_graph_image() {
 	};
 
 	{
-		Ref<Image> image = Image::create_empty(64, 64, false, Image::FORMAT_R8);
+		Ref<Image> image = zylann::godot::create_empty_image(64, 64, false, Image::FORMAT_R8);
 		image->fill(Color(0.5f, 0, 0));
 		L::test_range(image, Box3i(Vector3i(0, -8, 0), Vector3i(16, 16, 16)),
 				math::Interval(0.5f, 0.5f)
@@ -1940,18 +1942,176 @@ void test_voxel_graph_image() {
 						.padded(0.01f));
 	}
 	{
-		Ref<Image> image = Image::create_empty(64, 64, false, Image::FORMAT_R8);
+		Ref<Image> image = zylann::godot::create_empty_image(64, 64, false, Image::FORMAT_R8);
 		image->fill(Color(0.5f, 0, 0));
 		L::test_range(
 				image, Box3i(Vector3i(-24, -8, -8), Vector3i(16, 16, 16)), math::Interval(0.5f, 0.5f).padded(0.01f));
 	}
 	{
-		Ref<Image> image = Image::create_empty(64, 64, false, Image::FORMAT_R8);
+		Ref<Image> image = zylann::godot::create_empty_image(64, 64, false, Image::FORMAT_R8);
 		image->fill(Color(0.5f, 0, 0));
 		image->set_pixel(8, 8, Color(0.7f, 0, 0));
 		L::test_range(
 				image, Box3i(Vector3i(-24, -8, -8), Vector3i(16, 16, 16)), math::Interval(0.5f, 0.5f).padded(0.01f));
 	}
+}
+
+void test_voxel_graph_many_weight_outputs() {
+	Ref<VoxelGeneratorGraph> generator;
+	generator.instantiate();
+	static constexpr unsigned int USED_WEIGHTS_COUNT = 13;
+	static constexpr unsigned int PEAKING_INDEX = 5;
+	{
+		Ref<VoxelGraphFunction> func = generator->get_main_function();
+		ZN_ASSERT(func.is_valid());
+
+		//
+		//  Y --- Sdf
+		//    |
+		//    --- * --- OutputWeight[PEAKING_INDEX]
+		//    |
+		//    --- OutputWeight1
+		//    |
+		//    --- OutputWeight2
+		//    |
+		//    [...]
+
+		const uint32_t n_y = func->create_node(VoxelGraphFunction::NODE_INPUT_Y, Vector2());
+		const uint32_t n_out_sdf = func->create_node(VoxelGraphFunction::NODE_OUTPUT_SDF, Vector2());
+
+		const uint32_t n_mul = func->create_node(VoxelGraphFunction::NODE_MULTIPLY, Vector2());
+		func->set_node_default_input(n_mul, 1, 10.f);
+
+		FixedArray<uint32_t, USED_WEIGHTS_COUNT> weight_outs;
+		for (unsigned int i = 0; i < weight_outs.size(); ++i) {
+			const unsigned int n_out = func->create_node(VoxelGraphFunction::NODE_OUTPUT_WEIGHT, Vector2());
+			func->set_node_param(n_out, 0, i);
+			weight_outs[i] = n_out;
+		}
+
+		func->add_connection(n_y, 0, n_out_sdf, 0);
+
+		func->add_connection(n_y, 0, n_mul, 0);
+
+		for (unsigned int i = 0; i < weight_outs.size(); ++i) {
+			const uint32_t n_out = weight_outs[i];
+			if (i == PEAKING_INDEX) {
+				func->add_connection(n_mul, 0, n_out, 0);
+			} else {
+				func->add_connection(n_y, 0, n_out, 0);
+			}
+		}
+	}
+
+	// This used to crash/fail because the generator tried to compute spare indices when it doesnt actually make sense
+	// to do so when we have more than 4
+	const CompilationResult result = generator->compile(false);
+	ZN_TEST_ASSERT(result.success);
+
+	// TODO Also run that graph and test outputs?
+}
+
+void test_image_range_grid() {
+	Ref<Image> image_ref = Image::create_empty(300, 400, false, Image::FORMAT_RF);
+	Image &image = **image_ref;
+
+	for (int y = 0; y < image.get_height(); ++y) {
+		for (int x = 0; x < image.get_width(); ++x) {
+			const float h = 10.f + 0.3 * x + 0.1 * y;
+			image.set_pixel(x, y, Color(h, h, h));
+		}
+	}
+
+	using namespace math;
+
+	struct L {
+		static Color get_pixel_repeat(const Image &im, int x, int y) {
+			return im.get_pixel(math::wrap(x, im.get_width()), math::wrap(y, im.get_height()));
+		}
+
+		static Interval get_range_repeat(const Image &im, Interval x, Interval y) {
+			const int min_x = Math::floor(x.min);
+			const int min_y = Math::floor(y.min);
+			const int max_x = Math::ceil(x.max);
+			const int max_y = Math::ceil(y.max);
+
+			Interval i = Interval::from_single_value(get_pixel_repeat(im, min_x, min_y).r);
+			for (int y = min_y; y < max_y; ++y) {
+				for (int x = min_x; x < max_x; ++x) {
+					const float h = get_pixel_repeat(im, x, y).r;
+					i.add_point(h);
+				}
+			}
+
+			return i;
+		}
+
+		static void test_range(const Image &im, const ImageRangeGrid &range_grid, Interval x, Interval y) {
+			const Interval accurate_range = L::get_range_repeat(im, x, y);
+			const Interval estimated_range = range_grid.get_range_repeat(x, y);
+			ZN_TEST_ASSERT(estimated_range.contains(accurate_range));
+		}
+	};
+
+	zylann::ImageRangeGrid image_range_grid;
+	image_range_grid.generate(image);
+
+	const int image_width = image.get_width();
+	const int image_height = image.get_height();
+
+	L::test_range(image, image_range_grid, Interval(0, 20), Interval(0, 10));
+	L::test_range(image, image_range_grid, Interval(50, 200), Interval(105, 240));
+	// Decimal
+	L::test_range(image, image_range_grid, Interval(100, 100.5), Interval(100, 100.5));
+	// Power of two
+	L::test_range(image, image_range_grid, Interval(16, 32), Interval(64, 80));
+	L::test_range(image, image_range_grid, Interval(0, image_width), Interval(0, image_height));
+	// Larger than image size
+	L::test_range(image, image_range_grid, Interval(-image_width, image_width), Interval(-image_height, image_height));
+	L::test_range(image, image_range_grid, //
+			Interval(-10 * image_width, 10 * image_width), //
+			Interval(-5 * image_height, 5 * image_height));
+	// Far away
+	L::test_range(image, image_range_grid, //
+			Interval(-10 * image_width + 50, -10 * image_width + 100),
+			Interval(-5 * image_height + 80, -5 * image_height + 90));
+	// Cross boundary
+	L::test_range(image, image_range_grid, //
+			Interval(image_width - 10, image_width + 10), //
+			Interval(image_height - 5, image_height + 20));
+	L::test_range(image, image_range_grid, //
+			Interval(10 * image_width + image_width - 10, 10 * image_width + image_width + 10), //
+			Interval(5 * image_height + image_height - 5, 5 * image_height + image_height + 20));
+}
+
+void test_voxel_graph_many_subdivisions() {
+	Ref<VoxelGeneratorGraph> generator;
+	generator.instantiate();
+	{
+		VoxelGraphFunction &g = **generator->get_main_function();
+
+		//  FastNoise3D --- OutSDF
+
+		const uint32_t n_out_sdf = g.create_node(VoxelGraphFunction::NODE_OUTPUT_SDF, Vector2(0, 0));
+		const uint32_t n_noise = g.create_node(VoxelGraphFunction::NODE_FAST_NOISE_3D, Vector2());
+
+		Ref<ZN_FastNoiseLite> noise;
+		noise.instantiate();
+		g.set_node_param(n_noise, 0, noise);
+
+		g.add_connection(n_noise, 0, n_out_sdf, 0);
+
+		CompilationResult result = generator->compile(false);
+		ZN_TEST_ASSERT(result.success);
+	}
+
+	VoxelBuffer vb(VoxelBuffer::ALLOCATOR_DEFAULT);
+	vb.create(16, 512, 16);
+
+	// Just checking that it doesn't crash.
+	// There was an issue with subdivisions where we gathered "required outputs" filling a small array before running
+	// the graph, but it didn't reset that process at next subdivisions so eventually overran the array
+	generator->generate_block(VoxelGenerator::VoxelQueryData{ vb, Vector3i(0, 0, 0), 0 });
 }
 
 } // namespace zylann::voxel::tests

@@ -1,12 +1,13 @@
 #include "voxel_generator_multipass_cb.h"
 #include "../../engine/buffered_task_scheduler.h"
+#include "../../util/containers/container_funcs.h"
 #include "../../util/dstack.h"
+#include "../../util/godot/check_ref_ownership.h"
+#include "../../util/godot/classes/time.h"
 #include "../../util/godot/core/array.h"
 #include "../../util/profiling.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #include "generate_block_multipass_cb_task.h"
-
-#include "../../util/godot/classes/time.h"
 
 namespace zylann::voxel {
 
@@ -56,27 +57,26 @@ void VoxelGeneratorMultipassCB::generate_block_fallback_script(VoxelQueryData &i
 	}
 
 	// Create a temporary wrapper so Godot can pass it to scripts
-	Ref<godot::VoxelBuffer> buffer_wrapper;
+	Ref<godot::VoxelBuffer> buffer_wrapper(
+			memnew(godot::VoxelBuffer(static_cast<godot::VoxelBuffer::Allocator>(input.voxel_buffer.get_allocator()))));
 	buffer_wrapper.instantiate();
 	buffer_wrapper->get_buffer().copy_format(input.voxel_buffer);
 	buffer_wrapper->get_buffer().create(input.voxel_buffer.get_size());
 
-#if defined(ZN_GODOT)
-	GDVIRTUAL_CALL(_generate_block_fallback, buffer_wrapper, input.origin_in_voxels);
-#else
-	// ERR_PRINT_ONCE("VoxelGeneratorScript::_generate_block is not supported yet in GDExtension!");
-#endif
+	{
+		ZN_GODOT_CHECK_REF_COUNT_DOES_NOT_CHANGE(buffer_wrapper);
+		GDVIRTUAL_CALL(_generate_block_fallback, buffer_wrapper, input.origin_in_voxels);
+	}
+
+	// The wrapper is discarded
+	buffer_wrapper->get_buffer().move_to(input.voxel_buffer);
 }
 
 int VoxelGeneratorMultipassCB::get_used_channels_mask() const {
 	int mask = 0;
-#if defined(ZN_GODOT)
 	if (!GDVIRTUAL_CALL(_get_used_channels_mask, mask)) {
 		// WARN_PRINT_ONCE("VoxelGeneratorScript::_get_used_channels_mask is unimplemented!");
 	}
-#else
-	// ERR_PRINT_ONCE("VoxelGeneratorScript::_get_used_channels_mask is not supported yet in GDExtension!");
-#endif
 	return mask;
 }
 
@@ -179,11 +179,11 @@ inline Vector2i to_vec2i_xz(Vector3i p) {
 }
 
 Box2i to_box2i_in_height_range(Box3i box3, int min_y, int height) {
-	if (box3.pos.y + box3.size.y <= min_y || box3.pos.y >= min_y + height) {
+	if (box3.position.y + box3.size.y <= min_y || box3.position.y >= min_y + height) {
 		// Empty box because it doesn't intersect the height range
-		return Box2i(to_vec2i_xz(box3.pos), Vector2i());
+		return Box2i(to_vec2i_xz(box3.position), Vector2i());
 	}
-	return Box2i(to_vec2i_xz(box3.pos), to_vec2i_xz(box3.size));
+	return Box2i(to_vec2i_xz(box3.position), to_vec2i_xz(box3.size));
 }
 
 } // namespace
@@ -193,14 +193,16 @@ void VoxelGeneratorMultipassCB::generate_pass(PassInput input) {
 
 	// Note: must not access _internal from here, only use `input`
 
-	Variant v = get_script();
 	if (get_script() != Variant()) {
 		// TODO Cache it?
 		Ref<VoxelToolMultipassGenerator> vt;
 		vt.instantiate();
 		vt->set_pass_input(input);
-		call("_generate_pass", vt, input.pass_index);
-		// GDVIRTUAL_CALL(_generate_pass, vt, input.pass_index);
+
+		{
+			ZN_GODOT_CHECK_REF_COUNT_DOES_NOT_CHANGE(vt);
+			GDVIRTUAL_CALL(_generate_pass, vt, input.pass_index);
+		}
 
 		{
 			ZN_PROFILE_SCOPE_NAMED("Compress uniform blocks");
@@ -493,7 +495,7 @@ TypedArray<godot::VoxelBuffer> VoxelGeneratorMultipassCB::debug_generate_test_co
 					}
 				});
 
-				const Vector2i grid_origin_2d = grid_origin + nbox.pos;
+				const Vector2i grid_origin_2d = grid_origin + nbox.position;
 				const Vector2i main_origin_2d =
 						grid_origin_2d + Vector2iUtil::create(extent); // grid_origin + local_bpos
 
@@ -546,7 +548,7 @@ bool VoxelGeneratorMultipassCB::_set(const StringName &p_name, const Variant &p_
 	const String property_name = p_name;
 
 	if (property_name.begins_with("pass_")) {
-		const int index_pos = ZN_ARRAY_LENGTH("pass_") - 1; // -1 to exclude the '\0'
+		const int index_pos = string_literal_length("pass_");
 		const int index_end_pos = property_name.find("_", index_pos);
 		const int index = property_name.substr(index_pos, index_end_pos - index_pos).to_int();
 
@@ -564,7 +566,7 @@ bool VoxelGeneratorMultipassCB::_get(const StringName &p_name, Variant &r_ret) c
 	const String property_name = p_name;
 
 	if (property_name.begins_with("pass_")) {
-		const int index_pos = ZN_ARRAY_LENGTH("pass_") - 1; // -1 to exclude the '\0'
+		const int index_pos = string_literal_length("pass_");
 		const int index_end_pos = property_name.find("_", index_pos);
 		const int index = property_name.substr(index_pos, index_end_pos - index_pos).to_int();
 

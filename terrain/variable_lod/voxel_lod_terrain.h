@@ -7,15 +7,15 @@
 #include "../../util/containers/std_map.h"
 #include "../../util/containers/std_unordered_map.h"
 #include "../../util/containers/std_vector.h"
-#include "../../util/godot/shader_material_pool.h"
 #include "../voxel_mesh_map.h"
 #include "../voxel_node.h"
 #include "lod_octree.h"
+#include "shader_material_pool_vlt.h"
 #include "voxel_lod_terrain_update_data.h"
 #include "voxel_mesh_block_vlt.h"
 
 #ifdef TOOLS_ENABLED
-#include "../../editor/voxel_debug.h"
+#include "../../util/godot/debug_renderer.h"
 #endif
 
 
@@ -27,11 +27,6 @@ class VoxelTool;
 class VoxelStream;
 class VoxelInstancer;
 class VoxelSaveCompletionTracker;
-
-class ShaderMaterialPoolVLT : public zylann::godot::ShaderMaterialPool {
-public:
-	void recycle(Ref<ShaderMaterial> material);
-};
 
 // Paged terrain made of voxel blocks of variable level of detail.
 // Designed for highest view distances, preferably using smooth voxels.

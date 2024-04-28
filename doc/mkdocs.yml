@@ -33,6 +33,7 @@ nav:
   - '___.md'
   - 'Scripting API':
     # <generated_class_list>
+    - api/all_classes.md
     - api/FastNoise2.md
     - api/VoxelAStarGrid3D.md
     - api/VoxelBlockSerializer.md
@@ -87,6 +88,7 @@ nav:
     - api/VoxelRaycastResult.md
     - api/VoxelSaveCompletionTracker.md
     - api/VoxelStream.md
+    - api/VoxelStreamMemory.md
     - api/VoxelStreamRegionFiles.md
     - api/VoxelStreamSQLite.md
     - api/VoxelStreamScript.md

@@ -3,13 +3,18 @@
 
 #include "../util/containers/fixed_array.h"
 #include "../util/containers/flat_map.h"
+#include "../util/containers/small_vector.h"
 #include "../util/math/box3i.h"
 #include "funcs.h"
-#include "voxel_metadata.h"
+#include "metadata/voxel_metadata.h"
 
 #include <limits>
 
-namespace zylann::voxel {
+namespace zylann {
+
+class DynamicBitset;
+
+namespace voxel {
 
 // Dense voxels data storage.
 // Organized in channels of configurable bit depth.
@@ -31,19 +36,27 @@ public:
 
 	static const int ALL_CHANNELS_MASK = 0xff;
 
-	enum Compression {
+	enum Compression : uint8_t {
 		COMPRESSION_NONE = 0,
-		COMPRESSION_UNIFORM,
-		// COMPRESSION_RLE,
+		COMPRESSION_UNIFORM, // aka "no voxels allocated"
 		COMPRESSION_COUNT
 	};
 
-	enum Depth { //
+	enum Depth : uint8_t { //
 		DEPTH_8_BIT,
 		DEPTH_16_BIT,
 		DEPTH_32_BIT,
 		DEPTH_64_BIT,
 		DEPTH_COUNT
+	};
+
+	enum Allocator : uint8_t { //
+		// General-purpose allocator. malloc, Godot's default allocator. Deallocated when the buffer is destroyed.
+		ALLOCATOR_DEFAULT,
+		// VoxelMemoryPool. Should be faster but remains allocated. Preferred if buffers of similar size are frequently
+		// created at runtime. Don't use for large, infrequent allocations or in-editor, to avoid hoarding memory.
+		ALLOCATOR_POOL,
+		ALLOCATOR_COUNT
 	};
 
 	static inline uint32_t get_depth_byte_count(VoxelBuffer::Depth d) {
@@ -82,15 +95,19 @@ public:
 	static const uint32_t MAX_SIZE = 65535;
 
 	struct Channel {
-		// Allocated when the channel is populated.
-		// Flat array, in order [z][x][y] because it allows faster vertical-wise access (the engine is Y-up).
-		uint8_t *data = nullptr;
+		union {
+			// Allocated when the channel is populated.
+			// Flat array, in order [z][x][y] because it allows faster vertical-wise access (the engine is Y-up).
+			uint8_t *data;
 
-		// Default value when data is null.
-		// This is an encoded value, so non-integer values may be obtained by converting it.
-		uint64_t defval = 0;
+			// Default value when the channel is not populated ().
+			// This is an encoded value, so non-integer values may be obtained by converting it.
+			uint64_t defval;
+		};
 
 		Depth depth = DEFAULT_CHANNEL_DEPTH;
+		Compression compression = COMPRESSION_UNIFORM;
+		// [...] 2 unused bytes
 
 		// Storing gigabytes in a single buffer is neither supported nor practical.
 		uint32_t size_in_bytes = 0;
@@ -98,7 +115,8 @@ public:
 		static const size_t MAX_SIZE_IN_BYTES = std::numeric_limits<uint32_t>::max();
 	};
 
-	VoxelBuffer();
+	// VoxelBuffer();
+	VoxelBuffer(Allocator allocator);
 	VoxelBuffer(VoxelBuffer &&src);
 
 	~VoxelBuffer();
@@ -107,9 +125,14 @@ public:
 
 	void create(unsigned int sx, unsigned int sy, unsigned int sz);
 	void create(Vector3i size);
+
 	void clear();
 	void clear_channel(unsigned int channel_index, uint64_t clear_value);
 	void clear_channel_f(unsigned int channel_index, real_t clear_value);
+
+	inline Allocator get_allocator() const {
+		return _allocator;
+	}
 
 	inline const Vector3i &get_size() const {
 		return _size;
@@ -203,7 +226,7 @@ public:
 		ZN_ASSERT_RETURN(channel.depth == get_depth_from_size(sizeof(T)));
 #endif
 
-		if (channel.data == nullptr) {
+		if (channel.compression == COMPRESSION_UNIFORM) {
 			fill_3d_region_zxy<T>(dst, dst_size, dst_min, dst_min + (src_max - src_min), channel.defval);
 		} else {
 			Span<const T> src(static_cast<const T *>(channel.data), channel.size_in_bytes / sizeof(T));
@@ -221,8 +244,8 @@ public:
 		ZN_ASSERT_RETURN(channel_index < MAX_CHANNELS);
 
 		box.clip(Box3i(Vector3i(), _size));
-		Vector3i min_pos = box.pos;
-		Vector3i max_pos = box.pos + box.size;
+		const Vector3i min_pos = box.position;
+		const Vector3i max_pos = box.position + box.size;
 		Vector3i pos;
 		for (pos.z = min_pos.z; pos.z < max_pos.z; ++pos.z) {
 			for (pos.x = min_pos.x; pos.x < max_pos.x; ++pos.x) {
@@ -248,8 +271,8 @@ public:
 
 	template <typename F>
 	inline void for_each_index_and_pos(const Box3i &box, F f) {
-		const Vector3i min_pos = box.pos;
-		const Vector3i max_pos = box.pos + box.size;
+		const Vector3i min_pos = box.position;
+		const Vector3i max_pos = box.position + box.size;
 		Vector3i pos;
 		for (pos.z = min_pos.z; pos.z < max_pos.z; ++pos.z) {
 			for (pos.x = min_pos.x; pos.x < max_pos.x; ++pos.x) {
@@ -361,19 +384,13 @@ public:
 		}
 	}*/
 
-	static inline FixedArray<uint8_t, MAX_CHANNELS> mask_to_channels_list(
-			uint8_t channels_mask, unsigned int &out_count) {
-		FixedArray<uint8_t, VoxelBuffer::MAX_CHANNELS> channels;
-		unsigned int channel_count = 0;
-
+	static inline SmallVector<uint8_t, MAX_CHANNELS> mask_to_channels_list(uint8_t channels_mask) {
+		SmallVector<uint8_t, MAX_CHANNELS> channels;
 		for (unsigned int channel_index = 0; channel_index < VoxelBuffer::MAX_CHANNELS; ++channel_index) {
 			if (((1 << channel_index) & channels_mask) != 0) {
-				channels[channel_count] = channel_index;
-				++channel_count;
+				channels.push_back(channel_index);
 			}
 		}
-
-		out_count = channel_count;
 		return channels;
 	}
 
@@ -397,6 +414,7 @@ public:
 	}
 
 	bool get_channel_raw(unsigned int channel_index, Span<uint8_t> &slice) const;
+	bool get_channel_raw_read_only(unsigned int channel_index, Span<const uint8_t> &slice) const;
 
 	template <typename T>
 	bool get_channel_data(unsigned int channel_index, Span<T> &dst) const {
@@ -448,6 +466,11 @@ public:
 		}
 	}
 
+	template <typename F>
+	inline void erase_voxel_metadata_if(F predicate) {
+		_voxel_metadata.remove_if(predicate);
+	}
+
 	// #ifdef ZN_GODOT
 	// 	// TODO Move out of here
 	// 	void for_each_voxel_metadata(const Callable &callback) const;
@@ -464,12 +487,13 @@ public:
 	}
 
 private:
+	void init_channel_defaults();
 	bool create_channel_noinit(int i, Vector3i size);
 	bool create_channel(int i, uint64_t defval);
 	void delete_channel(int i);
 	void compress_if_uniform(Channel &channel);
-	static void delete_channel(Channel &channel);
-	static void clear_channel(Channel &channel, uint64_t clear_value);
+	static void delete_channel(Channel &channel, Allocator allocator);
+	static void clear_channel(Channel &channel, uint64_t clear_value, Allocator allocator);
 	static bool is_uniform(const Channel &channel);
 
 private:
@@ -480,28 +504,58 @@ private:
 	// How many voxels are there in the three directions. All populated channels have the same size.
 	Vector3i _size;
 
+	// Which allocator will be used when storing individual voxels is needed.
+	// The default is the least likely to be misused, though not necessarily the fastest.
+	Allocator _allocator = ALLOCATOR_DEFAULT;
+
 	// TODO Could we separate metadata from VoxelBuffer?
 	VoxelMetadata _block_metadata;
 	// This metadata is expected to be sparse, with low amount of items.
 	FlatMapMoveOnly<Vector3i, VoxelMetadata> _voxel_metadata;
 };
 
-inline void debug_check_texture_indices_packed_u16(const VoxelBuffer &voxels) {
-	for (int z = 0; z < voxels.get_size().z; ++z) {
-		for (int x = 0; x < voxels.get_size().x; ++x) {
-			for (int y = 0; y < voxels.get_size().y; ++y) {
-				uint16_t pi = voxels.get_voxel(x, y, z, VoxelBuffer::CHANNEL_INDICES);
-				FixedArray<uint8_t, 4> indices = decode_indices_from_packed_u16(pi);
-				debug_check_texture_indices(indices);
-			}
-		}
-	}
-}
-
 void get_unscaled_sdf(const VoxelBuffer &voxels, Span<float> sdf);
 void scale_and_store_sdf(VoxelBuffer &voxels, Span<float> sdf);
 void scale_and_store_sdf_if_modified(VoxelBuffer &voxels, Span<float> sdf, Span<const float> comparand);
 
-} // namespace zylann::voxel
+void paste(Span<const uint8_t> channels, //
+		const VoxelBuffer &src_buffer, //
+		VoxelBuffer &dst_buffer, //
+		const Vector3i dst_base_pos, //
+		bool with_metadata);
+
+// Paste if the source is not a certain value
+void paste_src_masked(Span<const uint8_t> channels, //
+		const VoxelBuffer &src_buffer, //
+		unsigned int src_mask_channel, //
+		uint64_t src_mask_value, //
+		VoxelBuffer &dst_buffer, //
+		const Vector3i dst_base_pos, //
+		bool with_metadata); //
+
+// Paste if the source is not a certain value, and the destination is a certain value
+void paste_src_masked_dst_writable_value(Span<const uint8_t> channels, //
+		const VoxelBuffer &src_buffer, //
+		unsigned int src_mask_channel, //
+		uint64_t src_mask_value, //
+		VoxelBuffer &dst_buffer, //
+		const Vector3i dst_base_pos, //
+		unsigned int dst_mask_channel, //
+		uint64_t dst_mask_value, //
+		bool with_metadata); //
+
+// Paste if the source is not a certain value, and the specified bitset contains the destination value
+void paste_src_masked_dst_writable_bitarray(Span<const uint8_t> channels, //
+		const VoxelBuffer &src_buffer, //
+		unsigned int src_mask_channel, //
+		uint64_t src_mask_value, //
+		VoxelBuffer &dst_buffer, //
+		const Vector3i dst_base_pos, //
+		unsigned int dst_mask_channel, //
+		const DynamicBitset &bitarray, //
+		bool with_metadata);
+
+} // namespace voxel
+} // namespace zylann
 
 #endif // VOXEL_BUFFER_INTERNAL_H

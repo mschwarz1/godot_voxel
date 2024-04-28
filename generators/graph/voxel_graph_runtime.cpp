@@ -4,7 +4,7 @@
 #include "../../util/io/log.h"
 #include "../../util/macros.h"
 #include "../../util/profiling.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #ifdef TOOLS_ENABLED
 #include "../../util/profiling_clock.h"
 #endif
@@ -596,7 +596,7 @@ void Runtime::debug_print_operations() {
 		const Span<const uint16_t> outputs = operations.sub(pc, outputs_count);
 		pc += outputs_count;
 
-		/*Span<const uint8_t> params = */ read_params(operations, pc);
+		Span<const uint8_t> params = read_params(operations, pc);
 
 		ss << "[";
 		ss << op_index;
@@ -616,12 +616,15 @@ void Runtime::debug_print_operations() {
 			}
 			ss << int(outputs[i]);
 		}
-		ss << ")\n";
+		ss << ") ";
+		ss << "params(";
+		ss << params.size();
+		ss << "b)\n";
 
 		++op_index;
 	}
 
-	println(ss.str());
+	print_line(ss.str());
 }
 
 #endif

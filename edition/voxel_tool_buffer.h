@@ -20,6 +20,7 @@ public:
 	Variant get_voxel_metadata(Vector3i pos) const override;
 
 	void do_sphere(Vector3 center, float radius) override;
+	void do_box(Vector3i begin, Vector3i end) override;
 	void do_path(Span<const Vector3> positions, Span<const float> radii) override;
 
 protected:
@@ -30,6 +31,9 @@ protected:
 	void _post_edit(const Box3i &box) override;
 
 private:
+	// When compiling with GodotCpp, `_bind_methods` is not optional.
+	static void _bind_methods() {}
+
 	Ref<godot::VoxelBuffer> _buffer;
 };
 

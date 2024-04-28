@@ -4,7 +4,8 @@
 #include "../util/godot/classes/image.h"
 #include "../util/math/color.h"
 #include "../util/memory/memory.h"
-#include "voxel_metadata_variant.h"
+#include "../util/string/format.h"
+#include "metadata/voxel_metadata_variant.h"
 
 namespace zylann::voxel::godot {
 
@@ -13,13 +14,32 @@ static thread_local bool s_create_shared = false;
 
 VoxelBuffer::VoxelBuffer() {
 	if (!s_create_shared) {
-		_buffer = make_shared_instance<zylann::voxel::VoxelBuffer>();
+		_buffer = make_shared_instance<zylann::voxel::VoxelBuffer>(zylann::voxel::VoxelBuffer::ALLOCATOR_DEFAULT);
 	}
+}
+
+VoxelBuffer::VoxelBuffer(VoxelBuffer::Allocator allocator) {
+	if (allocator < 0 || allocator >= ALLOCATOR_COUNT) {
+		ZN_PRINT_ERROR(format("Out of bounds allocator {}", allocator));
+		allocator = ALLOCATOR_DEFAULT;
+	}
+	_buffer = make_shared_instance<zylann::voxel::VoxelBuffer>(
+			static_cast<zylann::voxel::VoxelBuffer::Allocator>(allocator));
 }
 
 VoxelBuffer::VoxelBuffer(std::shared_ptr<zylann::voxel::VoxelBuffer> &other) {
 	CRASH_COND(other == nullptr);
 	_buffer = other;
+}
+
+void VoxelBuffer::create(int x, int y, int z) {
+	ZN_ASSERT_RETURN(x >= 0);
+	ZN_ASSERT_RETURN(y >= 0);
+	ZN_ASSERT_RETURN(z >= 0);
+	// Not exposing allocators to scripts for now. Will do if the need comes up.
+	// ZN_ASSERT_RETURN(allocator >= 0 && allocator < ALLOCATOR_COUNT);
+	// _buffer->create(Vector3i(x, y, z), static_cast<zylann::voxel::VoxelBuffer::Allocator>(allocator));
+	_buffer->create(Vector3i(x, y, z));
 }
 
 Ref<VoxelBuffer> VoxelBuffer::create_shared(std::shared_ptr<zylann::voxel::VoxelBuffer> &other) {
@@ -154,6 +174,10 @@ void VoxelBuffer::remap_values(unsigned int channel_index, PackedInt32Array map)
 			ZN_PRINT_ERROR("Remapping channel values is not implemented for depths greater than 16 bits.");
 			break;
 	}
+}
+
+VoxelBuffer::Allocator VoxelBuffer::get_allocator() const {
+	return static_cast<VoxelBuffer::Allocator>(_buffer->get_allocator());
 }
 
 Variant VoxelBuffer::get_block_metadata() const {
@@ -350,6 +374,8 @@ void VoxelBuffer::_b_deprecated_optimize() {
 
 void VoxelBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("create", "sx", "sy", "sz"), &VoxelBuffer::_b_create);
+
+	ClassDB::bind_method(D_METHOD("get_allocator"), &VoxelBuffer::get_allocator);
 	ClassDB::bind_method(D_METHOD("clear"), &VoxelBuffer::clear);
 
 	ClassDB::bind_method(D_METHOD("get_size"), &VoxelBuffer::get_size);
@@ -368,6 +394,7 @@ void VoxelBuffer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("fill", "value", "channel"), &VoxelBuffer::fill, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("fill_f", "value", "channel"), &VoxelBuffer::fill_f, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("fill_area", "value", "min", "max", "channel"), &VoxelBuffer::fill_area, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("fill_area_f", "value", "min", "max", "channel"), &VoxelBuffer::fill_area_f);
 	ClassDB::bind_method(D_METHOD("copy_channel_from", "other", "channel"), &VoxelBuffer::copy_channel_from);
 	ClassDB::bind_method(D_METHOD("copy_channel_from_area", "other", "src_min", "src_max", "dst_min", "channel"),
 			&VoxelBuffer::copy_channel_from_area);
@@ -414,6 +441,10 @@ void VoxelBuffer::_bind_methods() {
 	BIND_ENUM_CONSTANT(COMPRESSION_NONE);
 	BIND_ENUM_CONSTANT(COMPRESSION_UNIFORM);
 	BIND_ENUM_CONSTANT(COMPRESSION_COUNT);
+
+	BIND_ENUM_CONSTANT(ALLOCATOR_DEFAULT);
+	BIND_ENUM_CONSTANT(ALLOCATOR_POOL);
+	BIND_ENUM_CONSTANT(ALLOCATOR_COUNT);
 
 	BIND_CONSTANT(MAX_SIZE);
 }

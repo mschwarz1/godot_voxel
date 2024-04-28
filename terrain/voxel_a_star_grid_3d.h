@@ -1,6 +1,7 @@
 #ifndef VOXEL_A_STAR_GRID_3D_H
 #define VOXEL_A_STAR_GRID_3D_H
 
+#include "../storage/voxel_buffer.h"
 #include "../storage/voxel_data.h"
 #include "../util/a_star_grid_3d.h"
 #include "../util/containers/dynamic_bitset.h"
@@ -13,6 +14,8 @@ class VoxelTerrain;
 
 class VoxelAStarGrid3DInternal : public AStarGrid3D {
 public:
+	VoxelAStarGrid3DInternal();
+
 	// Referring to VoxelData instead of using a VoxelTool because it allows to run the search in a threaded task.
 	// VoxelTool can't be used yet in threads because it holds a pointer to a terrain node, which could get deleted at
 	// any time.

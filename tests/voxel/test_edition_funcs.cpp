@@ -6,6 +6,7 @@
 #include "../../meshers/blocky/voxel_blocky_model_cube.h"
 #include "../../meshers/blocky/voxel_blocky_model_mesh.h"
 #include "../../storage/voxel_data.h"
+#include "../../util/godot/classes/image.h"
 #include "../testing.h"
 #include "test_util.h"
 
@@ -45,7 +46,7 @@ void test_run_blocky_random_tick() {
 	{
 		// All blocks of this map will be the same,
 		// an interleaving of all block types
-		VoxelBuffer model_buffer;
+		VoxelBuffer model_buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 		model_buffer.create(Vector3iUtil::create(data.get_block_size()));
 		for (int z = 0; z < model_buffer.get_size().z; ++z) {
 			for (int x = 0; x < model_buffer.get_size().x; ++x) {
@@ -58,7 +59,7 @@ void test_run_blocky_random_tick() {
 
 		const Box3i world_blocks_box(-4, -4, -4, 8, 8, 8);
 		world_blocks_box.for_each_cell_zxy([&data, &model_buffer](Vector3i block_pos) {
-			std::shared_ptr<VoxelBuffer> buffer = make_shared_instance<VoxelBuffer>();
+			std::shared_ptr<VoxelBuffer> buffer = make_shared_instance<VoxelBuffer>(VoxelBuffer::ALLOCATOR_DEFAULT);
 			buffer->create(model_buffer.get_size());
 			buffer->copy_channels_from(model_buffer);
 			VoxelDataBlock block(buffer, 0);
@@ -117,16 +118,16 @@ void test_run_blocky_random_tick() {
 	// and we only check the enclosing area.
 	const int error_margin = 0;
 	for (int axis_index = 0; axis_index < Vector3iUtil::AXIS_COUNT; ++axis_index) {
-		const int nd = cb.pick_box.pos[axis_index] - voxel_box.pos[axis_index];
-		const int pd = cb.pick_box.pos[axis_index] + cb.pick_box.size[axis_index] -
-				(voxel_box.pos[axis_index] + voxel_box.size[axis_index]);
+		const int nd = cb.pick_box.position[axis_index] - voxel_box.position[axis_index];
+		const int pd = cb.pick_box.position[axis_index] + cb.pick_box.size[axis_index] -
+				(voxel_box.position[axis_index] + voxel_box.size[axis_index]);
 		ZN_TEST_ASSERT(Math::abs(nd) <= error_margin);
 		ZN_TEST_ASSERT(Math::abs(pd) <= error_margin);
 	}
 }
 
 void test_box_blur() {
-	VoxelBuffer voxels;
+	VoxelBuffer voxels(VoxelBuffer::ALLOCATOR_DEFAULT);
 	voxels.create(64, 64, 64);
 
 	Vector3i pos;
@@ -154,11 +155,11 @@ void test_box_blur() {
 
 	// L::save_image(voxels, 32, "test_box_blur_src.png");
 
-	VoxelBuffer voxels_blurred_1;
+	VoxelBuffer voxels_blurred_1(VoxelBuffer::ALLOCATOR_DEFAULT);
 	ops::box_blur_slow_ref(voxels, voxels_blurred_1, blur_radius, sphere_pos, sphere_radius);
 	// L::save_image(voxels_blurred_1, 32 - blur_radius, "test_box_blur_blurred_1.png");
 
-	VoxelBuffer voxels_blurred_2;
+	VoxelBuffer voxels_blurred_2(VoxelBuffer::ALLOCATOR_DEFAULT);
 	ops::box_blur(voxels, voxels_blurred_2, blur_radius, sphere_pos, sphere_radius);
 	// L::save_image(voxels_blurred_2, 32 - blur_radius, "test_box_blur_blurred_2.png");
 
@@ -235,19 +236,17 @@ void test_discord_soakil_copypaste() {
 	});
 
 	struct L {
-		static void check_original(VoxelData &vd, float sdf_dequantize) {
+		static void check_original(VoxelData &vd) {
 			// Air above platform
-			const float sd_above_platform =
-					vd.get_voxel_f(Vector3i(0, 5, 0), VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+			const float sd_above_platform = vd.get_voxel_f(Vector3i(0, 5, 0), VoxelBuffer::CHANNEL_SDF);
 			ZN_TEST_ASSERT(sd_above_platform > 0.01f);
 
 			// Matter in platform
-			const float sd_in_platform = vd.get_voxel_f(Vector3i(0, 0, 0), VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+			const float sd_in_platform = vd.get_voxel_f(Vector3i(0, 0, 0), VoxelBuffer::CHANNEL_SDF);
 			ZN_TEST_ASSERT(sd_in_platform < -0.01f);
 
 			// Air below platform
-			const float sd_below_platform =
-					vd.get_voxel_f(Vector3i(0, -5, 0), VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+			const float sd_below_platform = vd.get_voxel_f(Vector3i(0, -5, 0), VoxelBuffer::CHANNEL_SDF);
 			ZN_TEST_ASSERT(sd_below_platform > 0.01f);
 
 			// Material
@@ -282,32 +281,23 @@ void test_discord_soakil_copypaste() {
 	};
 
 	// Checks terrain is as we expect
-	L::check_original(voxel_data,
-			// No edits yet, so SDF won't be quantized...
-			1.f);
+	L::check_original(voxel_data);
 
-	VoxelBuffer buffer_before_edit;
+	VoxelBuffer buffer_before_edit(VoxelBuffer::ALLOCATOR_DEFAULT);
 	buffer_before_edit.create(Vector3i(20, 20, 20));
 	const Vector3i undo_pos(-10, -10, -10);
 	voxel_data.copy(undo_pos, buffer_before_edit, 0xff);
 
-	// TODO This sucks, eventually we should have an API that does this automatically?
-	const float sdf_dequantize = 1.f /
-			VoxelBuffer::get_sdf_quantization_scale(buffer_before_edit.get_channel_depth(VoxelBuffer::CHANNEL_SDF));
-
 	// Check the copy
 	{
-		const float sd_above_platform =
-				buffer_before_edit.get_voxel_f(Vector3i(10, 19, 10), VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+		const float sd_above_platform = buffer_before_edit.get_voxel_f(Vector3i(10, 19, 10), VoxelBuffer::CHANNEL_SDF);
 		ZN_TEST_ASSERT(sd_above_platform > 0.01f);
 
 		const Vector3i pos_in_platform(10, 10, 10);
-		const float sd_in_platform =
-				buffer_before_edit.get_voxel_f(pos_in_platform, VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+		const float sd_in_platform = buffer_before_edit.get_voxel_f(pos_in_platform, VoxelBuffer::CHANNEL_SDF);
 		ZN_TEST_ASSERT(sd_in_platform < -0.01f);
 
-		const float sd_below_platform =
-				buffer_before_edit.get_voxel_f(Vector3i(10, 0, 10), VoxelBuffer::CHANNEL_SDF) * sdf_dequantize;
+		const float sd_below_platform = buffer_before_edit.get_voxel_f(Vector3i(10, 0, 10), VoxelBuffer::CHANNEL_SDF);
 		ZN_TEST_ASSERT(sd_below_platform > 0.01f);
 
 		const uint16_t packed_indices_in_platform =
@@ -342,7 +332,7 @@ void test_discord_soakil_copypaste() {
 
 	// Checks terrain is still as we expect. Not relying on copy() followed by equals(), because copy() is part of what
 	// we are testing
-	L::check_original(voxel_data, sdf_dequantize);
+	L::check_original(voxel_data);
 }
 
 } // namespace zylann::voxel::tests

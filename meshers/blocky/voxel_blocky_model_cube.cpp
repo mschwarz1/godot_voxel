@@ -1,4 +1,5 @@
 #include "voxel_blocky_model_cube.h"
+#include "../../util/containers/container_funcs.h"
 #include "../../util/math/conv.h"
 
 namespace zylann::voxel {
@@ -44,7 +45,7 @@ bool VoxelBlockyModelCube::_set(const StringName &p_name, const Variant &p_value
 	const String property_name = p_name;
 
 	if (property_name.begins_with("tile_")) {
-		String s = property_name.substr(ZN_ARRAY_LENGTH("tile_") - 1, property_name.length());
+		String s = property_name.substr(string_literal_length("tile_"), property_name.length());
 		Cube::Side side = name_to_side(s);
 		if (side != Cube::SIDE_COUNT) {
 			Vector2i v = p_value;
@@ -60,7 +61,7 @@ bool VoxelBlockyModelCube::_get(const StringName &p_name, Variant &r_ret) const 
 	const String property_name = p_name;
 
 	if (property_name.begins_with("tile_")) {
-		String s = property_name.substr(ZN_ARRAY_LENGTH("tile_") - 1, property_name.length());
+		String s = property_name.substr(string_literal_length("tile_"), property_name.length());
 		Cube::Side side = name_to_side(s);
 		if (side != Cube::SIDE_COUNT) {
 			r_ret = get_tile(VoxelBlockyModel::Side(side));
@@ -122,7 +123,8 @@ void bake_cube_geometry(const VoxelBlockyModelCube &config, VoxelBlockyModel::Ba
 	VoxelBlockyModel::BakedData::Surface &surface = baked_data.model.surfaces[0];
 
 	for (unsigned int side = 0; side < Cube::SIDE_COUNT; ++side) {
-		StdVector<Vector3f> &positions = surface.side_positions[side];
+		VoxelBlockyModel::BakedData::SideSurface &side_surface = surface.sides[side];
+		StdVector<Vector3f> &positions = side_surface.positions;
 		positions.resize(4);
 		for (unsigned int i = 0; i < 4; ++i) {
 			int corner = Cube::g_side_corners[side][i];
@@ -133,7 +135,7 @@ void bake_cube_geometry(const VoxelBlockyModelCube &config, VoxelBlockyModel::Ba
 			positions[i] = p;
 		}
 
-		StdVector<int> &indices = surface.side_indices[side];
+		StdVector<int> &indices = side_surface.indices;
 		indices.resize(6);
 		for (unsigned int i = 0; i < 6; ++i) {
 			indices[i] = Cube::g_side_quad_triangles[side][i];
@@ -165,8 +167,9 @@ void bake_cube_geometry(const VoxelBlockyModelCube &config, VoxelBlockyModel::Ba
 	const Vector2f s = Vector2f(1.0f) / atlas_size;
 
 	for (unsigned int side = 0; side < Cube::SIDE_COUNT; ++side) {
-		surface.side_uvs[side].resize(4);
-		StdVector<Vector2f> &uvs = surface.side_uvs[side];
+		VoxelBlockyModel::BakedData::SideSurface &side_surface = surface.sides[side];
+		StdVector<Vector2f> &uvs = side_surface.uvs;
+		uvs.resize(4);
 
 		const Vector2f *uv_norm = Cube::g_side_normals[side].y != 0 ? uv_norm_top_bottom : uv_norm_side;
 
@@ -175,7 +178,7 @@ void bake_cube_geometry(const VoxelBlockyModelCube &config, VoxelBlockyModel::Ba
 		}
 
 		if (bake_tangents) {
-			StdVector<float> &tangents = surface.side_tangents[side];
+			StdVector<float> &tangents = side_surface.tangents;
 			for (unsigned int i = 0; i < 4; ++i) {
 				for (unsigned int j = 0; j < 4; ++j) {
 					tangents.push_back(Cube::g_side_tangents[side][j]);

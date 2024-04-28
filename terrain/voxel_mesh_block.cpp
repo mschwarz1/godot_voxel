@@ -5,7 +5,7 @@
 #include "../util/godot/classes/node_3d.h"
 #include "../util/macros.h"
 #include "../util/profiling.h"
-#include "../util/string_funcs.h"
+#include "../util/string/format.h"
 
 #include "free_mesh_task.h"
 

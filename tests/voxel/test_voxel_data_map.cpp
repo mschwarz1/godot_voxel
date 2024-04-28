@@ -1,4 +1,5 @@
 #include "test_voxel_data_map.h"
+#include "../../storage/voxel_buffer.h"
 #include "../../storage/voxel_data_map.h"
 #include "../testing.h"
 
@@ -9,7 +10,7 @@ void test_voxel_data_map_paste_fill() {
 	static const int default_value = 0;
 	static const int channel = VoxelBuffer::CHANNEL_TYPE;
 
-	VoxelBuffer buffer;
+	VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 	buffer.create(32, 16, 32);
 	buffer.fill(voxel_value, channel);
 
@@ -18,7 +19,7 @@ void test_voxel_data_map_paste_fill() {
 
 	const Box3i box(Vector3i(10, 10, 10), buffer.get_size());
 
-	map.paste(box.pos, buffer, (1 << channel), false, 0, 0, true);
+	map.paste(box.position, buffer, (1 << channel), true);
 
 	// All voxels in the area must be as pasted
 	const bool is_match = box.all_cells_match([&map](const Vector3i &pos) { //
@@ -45,7 +46,7 @@ void test_voxel_data_map_paste_mask() {
 	static const int default_value = 0;
 	static const int channel = VoxelBuffer::CHANNEL_TYPE;
 
-	VoxelBuffer buffer;
+	VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 	buffer.create(32, 16, 32);
 	// Fill the inside of the buffer with a value, and outline it with another value, which we'll use as mask
 	buffer.fill(masked_value, channel);
@@ -62,11 +63,13 @@ void test_voxel_data_map_paste_mask() {
 
 	const Box3i box(Vector3i(10, 10, 10), buffer.get_size());
 
-	map.paste(box.pos, buffer, (1 << channel), true, channel, masked_value, true);
+	map.paste_masked(
+			box.position, buffer, (1 << channel), true, channel, masked_value, false, 0, Span<const int32_t>(), true);
 
 	// All voxels in the area must be as pasted. Ignoring the outline.
-	const bool is_match = box.padded(-1).all_cells_match(
-			[&map](const Vector3i &pos) { return map.get_voxel(pos, channel) == voxel_value; });
+	const bool is_match = box.padded(-1).all_cells_match([&map](const Vector3i &pos) { //
+		return map.get_voxel(pos, channel) == voxel_value;
+	});
 
 	/*for (int y = 0; y < buffer->get_size().y; ++y) {
 		String line = String("y={0} | ").format(varray(y));
@@ -120,7 +123,7 @@ void test_voxel_data_map_copy() {
 	map.create(0);
 
 	Box3i box(10, 10, 10, 32, 16, 32);
-	VoxelBuffer buffer;
+	VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_DEFAULT);
 	buffer.create(box.size);
 
 	// Fill the inside of the buffer with a value, and leave outline to zero,
@@ -133,12 +136,13 @@ void test_voxel_data_map_copy() {
 		}
 	}
 
-	map.paste(box.pos, buffer, (1 << channel), true, channel, default_value, true);
+	map.paste_masked(
+			box.position, buffer, (1 << channel), true, channel, default_value, false, 0, Span<const int32_t>(), true);
 
-	VoxelBuffer buffer2;
+	VoxelBuffer buffer2(VoxelBuffer::ALLOCATOR_DEFAULT);
 	buffer2.create(box.size);
 
-	map.copy(box.pos, buffer2, (1 << channel));
+	map.copy(box.position, buffer2, (1 << channel));
 
 	// for (int y = 0; y < buffer2->get_size().y; ++y) {
 	// 	String line = String("y={0} | ").format(varray(y));

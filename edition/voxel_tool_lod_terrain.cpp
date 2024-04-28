@@ -12,7 +12,6 @@
 #include "../util/godot/classes/mesh_instance_3d.h"
 #include "../util/godot/classes/rigid_body_3d.h"
 #include "../util/godot/classes/timer.h"
-#include "../util/godot/core/callable.h"
 #include "../util/island_finder.h"
 #include "../util/math/conv.h"
 #include "../util/tasks/async_dependency_tracker.h"
@@ -96,7 +95,7 @@ Ref<VoxelRaycastResult> VoxelToolLodTerrain::raycast(
 		bool operator()(const VoxelRaycastState &rs) {
 			// This is not particularly optimized, but runs fast enough for player raycasts
 			VoxelSingleValue defval;
-			defval.f = 1.f;
+			defval.f = constants::SDF_FAR_OUTSIDE;
 			const VoxelSingleValue v = data.get_voxel(rs.hit_position, VoxelBuffer::CHANNEL_SDF, defval);
 			return v.f < 0;
 		}
@@ -138,7 +137,7 @@ Ref<VoxelRaycastResult> VoxelToolLodTerrain::raycast(
 
 				inline float operator()(const Vector3i &pos) const {
 					VoxelSingleValue defval;
-					defval.f = 1.f;
+					defval.f = constants::SDF_FAR_OUTSIDE;
 					const VoxelSingleValue value = data.get_voxel(pos, VoxelBuffer::CHANNEL_SDF, defval);
 					return value.f;
 				}
@@ -159,6 +158,42 @@ Ref<VoxelRaycastResult> VoxelToolLodTerrain::raycast(
 	return res;
 }
 
+void VoxelToolLodTerrain::do_box(Vector3i begin, Vector3i end) {
+	ZN_PROFILE_SCOPE();
+	ERR_FAIL_COND(_terrain == nullptr);
+
+	ops::DoShapeChunked<ops::SdfAxisAlignedBox, ops::VoxelDataGridAccess> op;
+	op.shape.center = to_vec3(begin + end) * 0.5;
+	op.shape.half_size = to_vec3(end - begin) * 0.5;
+	op.shape.sdf_scale = get_sdf_scale();
+	op.box = op.shape.get_box().clipped(_terrain->get_voxel_bounds());
+	op.mode = static_cast<ops::Mode>(get_mode());
+	op.texture_params = _texture_params;
+	op.blocky_value = _value;
+	op.channel = get_channel();
+	op.strength = get_sdf_strength();
+
+	if (!is_area_editable(op.box)) {
+		ZN_PRINT_VERBOSE("Area not editable");
+		return;
+	}
+
+	VoxelData &data = _terrain->get_storage();
+
+	data.pre_generate_box(op.box);
+
+	VoxelDataGrid grid;
+	data.get_blocks_grid(grid, op.box, 0);
+	op.block_access.grid = &grid;
+
+	{
+		VoxelDataGrid::LockWrite wlock(grid);
+		op();
+	}
+
+	_post_edit(op.box);
+}
+
 void VoxelToolLodTerrain::do_sphere(Vector3 center, float radius) {
 	ZN_PROFILE_SCOPE();
 	ERR_FAIL_COND(_terrain == nullptr);
@@ -168,7 +203,7 @@ void VoxelToolLodTerrain::do_sphere(Vector3 center, float radius) {
 	op.shape.radius = radius;
 	op.shape.sdf_scale = get_sdf_scale();
 	op.box = op.shape.get_box().clipped(_terrain->get_voxel_bounds());
-	op.mode = ops::Mode(get_mode());
+	op.mode = static_cast<ops::Mode>(get_mode());
 	op.texture_params = _texture_params;
 	op.blocky_value = _value;
 	op.channel = get_channel();
@@ -200,7 +235,7 @@ void VoxelToolLodTerrain::do_hemisphere(Vector3 center, float radius, Vector3 fl
 	op.shape.smoothness = smoothness;
 	op.shape.sdf_scale = get_sdf_scale();
 	op.box = op.shape.get_box().clipped(_terrain->get_voxel_bounds());
-	op.mode = ops::Mode(get_mode());
+	op.mode = static_cast<ops::Mode>(get_mode());
 	op.texture_params = _texture_params;
 	op.blocky_value = _value;
 	op.channel = get_channel();
@@ -320,7 +355,7 @@ float VoxelToolLodTerrain::get_voxel_f_interpolated(Vector3 position) const {
 	return get_sdf_interpolated(
 			[&data, channel](Vector3i ipos) {
 				VoxelSingleValue defval;
-				defval.f = 1.f;
+				defval.f = constants::SDF_FAR_OUTSIDE;
 				VoxelSingleValue value = data.get_voxel(ipos, channel, defval);
 				return value.f;
 			},
@@ -337,7 +372,7 @@ uint64_t VoxelToolLodTerrain::_get_voxel(Vector3i pos) const {
 float VoxelToolLodTerrain::_get_voxel_f(Vector3i pos) const {
 	ERR_FAIL_COND_V(_terrain == nullptr, 0);
 	VoxelSingleValue defval;
-	defval.f = 1.f;
+	defval.f = constants::SDF_FAR_OUTSIDE;
 	return _terrain->get_storage().get_voxel(pos, _channel, defval).f;
 }
 
@@ -477,11 +512,11 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 	static const int channels_mask = (1 << VoxelBuffer::CHANNEL_SDF);
 	static const VoxelBuffer::ChannelId main_channel = VoxelBuffer::CHANNEL_SDF;
 
-	VoxelBuffer source_copy_buffer;
+	VoxelBuffer source_copy_buffer(VoxelBuffer::ALLOCATOR_POOL);
 	{
 		ZN_PROFILE_SCOPE_NAMED("Copy");
 		source_copy_buffer.create(world_box.size);
-		voxel_tool.copy(world_box.pos, source_copy_buffer, channels_mask);
+		voxel_tool.copy(world_box.position, source_copy_buffer, channels_mask);
 	}
 
 	// Label distinct voxel groups
@@ -614,11 +649,11 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 				continue;
 			}
 
-			const Vector3i world_pos = world_box.pos + local_bounds.min_pos - Vector3iUtil::create(min_padding);
+			const Vector3i world_pos = world_box.position + local_bounds.min_pos - Vector3iUtil::create(min_padding);
 			const Vector3i size =
 					local_bounds.max_pos - local_bounds.min_pos + Vector3iUtil::create(1 + max_padding + min_padding);
 
-			instances_info.push_back(InstanceInfo{ VoxelBuffer(), world_pos, label });
+			instances_info.push_back(InstanceInfo{ VoxelBuffer(VoxelBuffer::ALLOCATOR_POOL), world_pos, label });
 
 			VoxelBuffer &buffer = instances_info.back().voxels;
 			buffer.create(size.x, size.y, size.z);
@@ -630,7 +665,7 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 			const Box3i inner_box(Vector3iUtil::create(min_padding),
 					buffer.get_size() - Vector3iUtil::create(min_padding + max_padding));
 			Box3i(Vector3i(), buffer.get_size()).difference(inner_box, [&buffer](Box3i box) {
-				buffer.fill_area_f(1.f, box.pos, box.pos + box.size, main_channel);
+				buffer.fill_area_f(constants::SDF_FAR_OUTSIDE, box.position, box.position + box.size, main_channel);
 			});
 
 			// Filter out voxels that don't belong to this label
@@ -642,7 +677,7 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 						const uint8_t label2 = ccl_output[ccl_index];
 
 						if (label2 != 0 && label != label2) {
-							buffer.set_voxel_f(1.f, min_padding + x - local_bounds.min_pos.x,
+							buffer.set_voxel_f(constants::SDF_FAR_OUTSIDE, min_padding + x - local_bounds.min_pos.x,
 									min_padding + y - local_bounds.min_pos.y, min_padding + z - local_bounds.min_pos.z,
 									main_channel);
 						}
@@ -810,7 +845,7 @@ Array separate_floating_chunks(VoxelTool &voxel_tool, Box3i world_box, Node *par
 			Timer *timer = memnew(Timer);
 			timer->set_wait_time(0.2);
 			timer->set_one_shot(true);
-			timer->connect("timeout", ZN_GODOT_CALLABLE_MP(rigid_body, RigidBody3D, set_freeze_enabled).bind(false));
+			timer->connect("timeout", callable_mp(rigid_body, &RigidBody3D::set_freeze_enabled).bind(false));
 			// Cannot use start() here because it requires to be inside the SceneTree,
 			// and we don't know if it will be after we add to the parent.
 			timer->set_autostart(true);
@@ -899,6 +934,7 @@ void VoxelToolLodTerrain::stamp_sdf(
 
 	// TODO Support other depths, format should be accessible from the volume
 	ops::SdfOperation16bit<ops::SdfUnion, ops::SdfBufferShape> op;
+	op.op.strength = get_sdf_strength();
 	op.shape.world_to_buffer = buffer_to_world.affine_inverse();
 	op.shape.buffer_size = buffer.get_size();
 	op.shape.isolevel = isolevel;
@@ -942,9 +978,9 @@ void VoxelToolLodTerrain::do_graph(Ref<VoxelGeneratorGraph> graph, Transform3D t
 
 	const unsigned int channel_index = VoxelBuffer::CHANNEL_SDF;
 
-	VoxelBuffer buffer;
+	VoxelBuffer buffer(VoxelBuffer::ALLOCATOR_POOL);
 	buffer.create(box.size);
-	data.copy(box.pos, buffer, 1 << channel_index);
+	data.copy(box.position, buffer, 1 << channel_index);
 
 	buffer.decompress_channel(channel_index);
 
@@ -975,8 +1011,8 @@ void VoxelToolLodTerrain::do_graph(Ref<VoxelGeneratorGraph> graph, Transform3D t
 	const float graph_scale = transform.basis.get_scale().length();
 	const float inv_graph_scale = 1.f / graph_scale;
 
-	for (unsigned int i = 0; i < in_sdf_full.size(); ++i) {
-		in_sdf_full[i] *= inv_graph_scale;
+	for (float &sd : in_sdf_full) {
+		sd *= inv_graph_scale;
 	}
 
 	const float op_strength = get_sdf_strength();
@@ -986,16 +1022,16 @@ void VoxelToolLodTerrain::do_graph(Ref<VoxelGeneratorGraph> graph, Transform3D t
 		// For each deck of the box (doing this to reduce memory usage since the graph will allocate temporary buffers
 		// for each operation, which can be a lot depending on the complexity of the graph)
 		Vector3i pos;
-		const Vector3i endpos = box.pos + box.size;
-		for (pos.z = box.pos.z; pos.z < endpos.z; ++pos.z) {
+		const Vector3i endpos = box.position + box.size;
+		for (pos.z = box.position.z; pos.z < endpos.z; ++pos.z) {
 			// Set positions
 			for (unsigned int i = 0; i < deck_area; ++i) {
 				in_z[i] = pos.z;
 			}
 			{
 				unsigned int i = 0;
-				for (pos.x = box.pos.x; pos.x < endpos.x; ++pos.x) {
-					for (pos.y = box.pos.y; pos.y < endpos.y; ++pos.y) {
+				for (pos.x = box.position.x; pos.x < endpos.x; ++pos.x) {
+					for (pos.y = box.position.y; pos.y < endpos.y; ++pos.y) {
 						in_x[i] = pos.x;
 						in_y[i] = pos.y;
 						++i;
@@ -1006,14 +1042,14 @@ void VoxelToolLodTerrain::do_graph(Ref<VoxelGeneratorGraph> graph, Transform3D t
 			// Transform positions to be local to the graph
 			for (unsigned int i = 0; i < deck_area; ++i) {
 				Vector3 graph_local_pos(in_x[i], in_y[i], in_z[i]);
-				graph_local_pos = inv_transform.xform(pos);
+				graph_local_pos = inv_transform.xform(graph_local_pos);
 				in_x[i] = graph_local_pos.x;
 				in_y[i] = graph_local_pos.y;
 				in_z[i] = graph_local_pos.z;
 			}
 
 			// Get SDF input
-			Span<float> in_sdf = in_sdf_full.sub(deck_area * (pos.z - box.pos.z), deck_area);
+			Span<float> in_sdf = in_sdf_full.sub(deck_area * (pos.z - box.position.z), deck_area);
 
 			// Run graph
 			graph->generate_series(in_x, in_y, in_z, in_sdf);
@@ -1031,7 +1067,7 @@ void VoxelToolLodTerrain::do_graph(Ref<VoxelGeneratorGraph> graph, Transform3D t
 
 	scale_and_store_sdf(buffer, in_sdf_full);
 
-	data.paste(box.pos, buffer, 1 << channel_index, false);
+	data.paste(box.position, buffer, 1 << channel_index, false);
 
 	_post_edit(box);
 }

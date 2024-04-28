@@ -1,7 +1,7 @@
 #include "voxel_generator_noise.h"
 #include "../../constants/voxel_string_names.h"
 #include "../../util/godot/classes/fast_noise_lite.h"
-#include "../../util/godot/core/callable.h"
+#include "../../util/math/funcs.h"
 
 namespace zylann::voxel {
 
@@ -9,19 +9,19 @@ VoxelGeneratorNoise::VoxelGeneratorNoise() {}
 
 VoxelGeneratorNoise::~VoxelGeneratorNoise() {}
 
-void VoxelGeneratorNoise::set_noise(Ref<Noise> noise) {
+void VoxelGeneratorNoise::set_noise(Ref<FastNoiseLite> noise) {
 	if (_noise == noise) {
 		return;
 	}
 	if (_noise.is_valid()) {
-		_noise->disconnect(VoxelStringNames::get_singleton().changed,
-				ZN_GODOT_CALLABLE_MP(this, VoxelGeneratorNoise, _on_noise_changed));
+		_noise->disconnect(
+				VoxelStringNames::get_singleton().changed, callable_mp(this, &VoxelGeneratorNoise::_on_noise_changed));
 	}
 	_noise = noise;
-	Ref<Noise> copy;
+	Ref<FastNoiseLite> copy;
 	if (_noise.is_valid()) {
-		_noise->connect(VoxelStringNames::get_singleton().changed,
-				ZN_GODOT_CALLABLE_MP(this, VoxelGeneratorNoise, _on_noise_changed));
+		_noise->connect(
+				VoxelStringNames::get_singleton().changed, callable_mp(this, &VoxelGeneratorNoise::_on_noise_changed));
 		// The OpenSimplexNoise resource is not thread-safe so we make a copy of it for use in threads
 		copy = _noise->duplicate();
 	}
@@ -61,7 +61,7 @@ int VoxelGeneratorNoise::get_used_channels_mask() const {
 	return (1 << _parameters.channel);
 }
 
-Ref<Noise> VoxelGeneratorNoise::get_noise() const {
+Ref<FastNoiseLite> VoxelGeneratorNoise::get_noise() const {
 	return _noise;
 }
 
@@ -132,10 +132,14 @@ VoxelGenerator::Result VoxelGeneratorNoise::generate_block(VoxelGenerator::Voxel
 
 	ERR_FAIL_COND_V(params.noise.is_null(), Result());
 
-	Noise &noise = **params.noise;
+	FastNoiseLite &noise = **params.noise;
 	VoxelBuffer &buffer = input.voxel_buffer;
 	Vector3i origin_in_voxels = input.origin_in_voxels;
 	int lod = input.lod;
+
+	// We need the period to properly produce a signed distance. That's why we can't just take any Noise, or we'd need
+	// an extra property the user has to tweak manually.
+	const float noise_period = 1.0 / math::max<real_t>(noise.get_frequency(), 0.0001);
 
 	int isosurface_lower_bound = static_cast<int>(Math::floor(params.height_start));
 	int isosurface_upper_bound = static_cast<int>(Math::ceil(params.height_start + params.height_range));
@@ -170,7 +174,7 @@ VoxelGenerator::Result VoxelGeneratorNoise::generate_block(VoxelGenerator::Voxel
 		result.max_lod_hint = true;
 
 	} else {
-		const float iso_scale = 0.1f;
+		// const float iso_scale = 0.1f;
 		const Vector3i size = buffer.get_size();
 		const float height_range_inv = 1.f / params.height_range;
 		// const float one_minus_persistence = 1.f - noise.get_persistence();
@@ -187,7 +191,8 @@ VoxelGenerator::Result VoxelGeneratorNoise::generate_block(VoxelGenerator::Voxel
 					if (ly < isosurface_lower_bound) {
 						// Below is only matter
 						if (params.channel == VoxelBuffer::CHANNEL_SDF) {
-							buffer.set_voxel_f(-1, x, y, z, params.channel);
+							// Not consistent SDF but should work ok
+							buffer.set_voxel_f(constants::SDF_FAR_INSIDE, x, y, z, params.channel);
 						} else if (params.channel == VoxelBuffer::CHANNEL_TYPE) {
 							buffer.set_voxel(matter_type, x, y, z, params.channel);
 						} else if (params.channel == VoxelBuffer::CHANNEL_COLOR) {
@@ -198,7 +203,8 @@ VoxelGenerator::Result VoxelGeneratorNoise::generate_block(VoxelGenerator::Voxel
 					} else if (ly >= isosurface_upper_bound) {
 						// Above is only air
 						if (params.channel == VoxelBuffer::CHANNEL_SDF) {
-							buffer.set_voxel_f(1, x, y, z, params.channel);
+							// Not consistent SDF but should work ok
+							buffer.set_voxel_f(constants::SDF_FAR_OUTSIDE, x, y, z, params.channel);
 						} else if (params.channel == VoxelBuffer::CHANNEL_TYPE) {
 							buffer.set_voxel(air_type, x, y, z, params.channel);
 						} else if (params.channel == VoxelBuffer::CHANNEL_COLOR) {
@@ -214,7 +220,10 @@ VoxelGenerator::Result VoxelGeneratorNoise::generate_block(VoxelGenerator::Voxel
 					// We are near the isosurface, need to calculate noise value
 					// float n = get_shaped_noise(noise, lx, ly, lz, one_minus_persistence, bias);
 					const float n = noise.get_noise_3d(lx, ly, lz);
-					const float d = (n + bias) * iso_scale;
+					// We have to multiply -1..1 noise by its period in order to obtain a better signed distance. Not
+					// multiplying leads to gradients moving way too slowly, leading to blockyness because 16-bit
+					// encoding is tuned for proper distance fields
+					const float d = ((n + bias) * noise_period); // * iso_scale;
 
 					if (params.channel == VoxelBuffer::CHANNEL_SDF) {
 						buffer.set_voxel_f(d, x, y, z, params.channel);
@@ -252,13 +261,8 @@ void VoxelGeneratorNoise::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_height_range", "hrange"), &VoxelGeneratorNoise::set_height_range);
 	ClassDB::bind_method(D_METHOD("get_height_range"), &VoxelGeneratorNoise::get_height_range);
 
-#ifdef ZN_GODOT_EXTENSION
-	ClassDB::bind_method(D_METHOD("_on_noise_changed"), &VoxelGeneratorNoise::_on_noise_changed);
-#endif
-
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "channel", PROPERTY_HINT_ENUM, godot::VoxelBuffer::CHANNEL_ID_HINT_STRING),
 			"set_channel", "get_channel");
-	// TODO Accept `Noise` instead of `FastNoiseLite`?
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "noise", PROPERTY_HINT_RESOURCE_TYPE, FastNoiseLite::get_class_static(),
 						 PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_EDITOR_INSTANTIATE_OBJECT),
 			"set_noise", "get_noise");

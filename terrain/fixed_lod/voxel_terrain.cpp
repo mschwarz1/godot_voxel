@@ -27,7 +27,7 @@
 #include "../../util/math/conv.h"
 #include "../../util/profiling.h"
 #include "../../util/profiling_clock.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #include "../../util/tasks/async_dependency_tracker.h"
 #include "../instancing/voxel_instancer.h"
 #include "../voxel_data_block_enter_info.h"
@@ -770,11 +770,7 @@ void VoxelTerrain::post_edit_area(Box3i box_in_voxels, bool update_mesh) {
 
 	// TODO Maybe remove this in preference for multiplayer synchronizer virtual functions?
 	if (_area_edit_notification_enabled) {
-#if defined(ZN_GODOT)
-		GDVIRTUAL_CALL(_on_area_edited, box_in_voxels.pos, box_in_voxels.size);
-#else
-		ERR_PRINT_ONCE("VoxelTerrain::_on_area_edited is not supported yet in GDExtension!");
-#endif
+		GDVIRTUAL_CALL(_on_area_edited, box_in_voxels.position, box_in_voxels.size);
 	}
 
 	if (_multiplayer_synchronizer != nullptr && _multiplayer_synchronizer->is_server()) {
@@ -976,7 +972,8 @@ void VoxelTerrain::send_data_load_requests() {
 				// request and will complete on the next process.
 				// Ideally this shouldn't happen often. This is a corner case that occurs if the player moves fast
 				// back and forth or the task runner is overloaded.
-				std::shared_ptr<VoxelBuffer> voxel_data = make_shared_instance<VoxelBuffer>();
+				std::shared_ptr<VoxelBuffer> voxel_data =
+						make_shared_instance<VoxelBuffer>(VoxelBuffer::ALLOCATOR_POOL);
 				// Duplicating to make sure the saving version doesn't get altered by possible upcoming modifications.
 				saving_block_it->second->copy_to(*voxel_data, true);
 				_quick_reloading_blocks.push_back(QuickReloadingBlock{ voxel_data, block_pos });
@@ -1088,14 +1085,10 @@ void VoxelTerrain::notify_data_block_enter(const VoxelDataBlock &block, Vector3i
 	_data_block_enter_info_obj->voxel_block = block;
 	_data_block_enter_info_obj->block_position = bpos;
 
-#if defined(ZN_GODOT)
 	if (!GDVIRTUAL_CALL(_on_data_block_entered, _data_block_enter_info_obj.get()) &&
 			_multiplayer_synchronizer == nullptr) {
 		WARN_PRINT_ONCE("VoxelTerrain::_on_data_block_entered is unimplemented!");
 	}
-#else
-	ERR_PRINT_ONCE("VoxelTerrain::_on_data_block_entered is not supported yet in GDExtension!");
-#endif
 
 	if (_multiplayer_synchronizer != nullptr && !Engine::get_singleton()->is_editor_hint() &&
 			network_peer_id != MultiplayerPeer::TARGET_PEER_SERVER && _multiplayer_synchronizer->is_server()) {
@@ -1714,7 +1707,7 @@ void VoxelTerrain::process_meshing() {
 #ifdef DEBUG_ENABLED
 		// We must have picked up a valid data block
 		{
-			const Vector3i anchor_pos = data_box.pos + Vector3i(1, 1, 1);
+			const Vector3i anchor_pos = data_box.position + Vector3i(1, 1, 1);
 			ZN_ASSERT_CONTINUE(_data->has_block(anchor_pos, 0));
 		}
 #endif
@@ -2028,8 +2021,8 @@ void VoxelTerrain::process_debug_draw() {
 			const Vector3 margin = Vector3(1, 1, 1) * bounds_in_voxels_len * 0.0025f;
 			const Vector3 size = bounds_in_voxels.size;
 			const Transform3D local_transform(
-					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.pos) - margin);
-			dr.draw_box(parent_transform * local_transform, zylann::godot::DebugColors::ID_VOXEL_BOUNDS);
+					Basis().scaled(size + margin * 2.f), Vector3(bounds_in_voxels.position) - margin);
+			dr.draw_box(parent_transform * local_transform, Color(1, 1, 1));
 		}
 	}
 
@@ -2070,7 +2063,7 @@ void VoxelTerrain::_b_set_bounds(AABB aabb) {
 
 AABB VoxelTerrain::_b_get_bounds() const {
 	const Box3i b = get_bounds();
-	return AABB(b.pos, b.size);
+	return AABB(b.position, b.size);
 }
 
 bool VoxelTerrain::_b_try_set_block_data(Vector3i position, Ref<godot::VoxelBuffer> voxel_data) {
@@ -2171,7 +2164,7 @@ void VoxelTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_generator_use_gpu"), &VoxelTerrain::get_generator_use_gpu);
 
 	// TODO Rename `_voxel_bounds`
-	ClassDB::bind_method(D_METHOD("set_bounds"), &VoxelTerrain::_b_set_bounds);
+	ClassDB::bind_method(D_METHOD("set_bounds", "bounds"), &VoxelTerrain::_b_set_bounds);
 	ClassDB::bind_method(D_METHOD("get_bounds"), &VoxelTerrain::_b_get_bounds);
 
 	ClassDB::bind_method(D_METHOD("try_set_block_data", "position", "voxels"), &VoxelTerrain::_b_try_set_block_data);

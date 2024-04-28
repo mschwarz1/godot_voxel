@@ -1,7 +1,7 @@
 #ifndef ZN_STD_STRING_H
 #define ZN_STD_STRING_H
 
-#include "memory/std_allocator.h"
+#include "../memory/std_allocator.h"
 #include <string>
 
 #ifdef __GNUC__
@@ -11,6 +11,16 @@
 namespace zylann {
 
 using StdString = std::basic_string<char, std::char_traits<char>, StdDefaultAllocator<char>>;
+
+struct FwdConstStdString {
+	const StdString &s;
+	FwdConstStdString(const StdString &p_s) : s(p_s) {}
+};
+
+struct FwdMutableStdString {
+	StdString &s;
+	FwdMutableStdString(StdString &p_s) : s(p_s) {}
+};
 
 } // namespace zylann
 

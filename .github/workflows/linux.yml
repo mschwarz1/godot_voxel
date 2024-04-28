@@ -1,7 +1,7 @@
 name: 🐧 Linux Builds
 on:
   push:
-    branches: [ master, github_actions ]
+    branches: [ master, github_actions, "1.2" ]
   pull_request:
     branches: [ master ]
 
@@ -57,7 +57,7 @@ jobs:
             target: editor
             production: yes
             executable_name: godot.linuxbsd.editor.x86_64
-            godot_base_branch: "4.2"
+            godot_base_branch: "4.2.2-stable"
             warnings: extra
 
           - name: 4.2 Template
@@ -65,7 +65,7 @@ jobs:
             target: template_release
             production: yes
             executable_name: godot.linuxbsd.template_release.x86_64
-            godot_base_branch: "4.2"
+            godot_base_branch: "4.2.2-stable"
             warnings: extra
 
           - name: 4.2 Editor Float64
@@ -73,7 +73,7 @@ jobs:
             target: editor
             production: yes
             executable_name: godot.linuxbsd.editor.double.x86_64
-            godot_base_branch: "4.2"
+            godot_base_branch: "4.2.2-stable"
             warnings: extra
 
     steps:
@@ -95,15 +95,11 @@ jobs:
       #      Currently I also setup `PATH` in the Compilation step because modifications
       #      do not persist between steps (?). I also placed this step after checkout because the checkout step changes
       #      the working directory for all following steps.
-      # TODO Bug: pkg-config wrongly points to lib instead of lib64 for arch-dependent header.
-      #      Using `sed` to patch it as a workaround.
-      #      See https://github.com/godotengine/buildroot/issues/6
       - name: Setup buildroot
         run: |
           wget https://download.tuxfamily.org/godotengine/toolchains/linux/x86_64-godot-linux-gnu_sdk-buildroot.tar.bz2
           tar -xjf x86_64-godot-linux-gnu_sdk-buildroot.tar.bz2
           cd x86_64-godot-linux-gnu_sdk-buildroot
-          sed -i x86_64-godot-linux-gnu/sysroot/usr/lib/pkgconfig/dbus-1.pc -e "s@/lib@/lib64@g"
           ./relocate-sdk.sh
           cd ..
 

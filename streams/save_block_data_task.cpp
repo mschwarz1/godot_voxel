@@ -4,7 +4,7 @@
 #include "../storage/voxel_buffer.h"
 #include "../util/io/log.h"
 #include "../util/profiling.h"
-#include "../util/string_funcs.h"
+#include "../util/string/format.h"
 #include "../util/tasks/async_dependency_tracker.h"
 
 namespace zylann::voxel {
@@ -69,7 +69,7 @@ void SaveBlockDataTask::run(zylann::ThreadedTaskContext &ctx) {
 			return;
 		}
 
-		VoxelBuffer voxels_copy;
+		VoxelBuffer voxels_copy(VoxelBuffer::ALLOCATOR_POOL);
 		// Note, we are not locking voxels here. This is supposed to be done at the time this task is scheduled.
 		// If this is not a copy, it means the map it came from is getting unloaded anyways.
 		// TODO Optimization: is that copy necessary? It's possible it was already done while issuing the

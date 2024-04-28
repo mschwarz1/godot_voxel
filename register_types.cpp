@@ -8,7 +8,7 @@
 #include "edition/voxel_tool.h"
 #include "edition/voxel_tool_buffer.h"
 #include "edition/voxel_tool_lod_terrain.h"
-#include "edition/voxel_tool_cube_sphere_terrain.h"
+//#include "edition/voxel_tool_cube_sphere_terrain.h"
 #include "edition/voxel_tool_terrain.h"
 #include "engine/voxel_engine_gd.h"
 #include "generators/graph/node_type_db.h"
@@ -31,16 +31,17 @@
 #include "meshers/blocky/voxel_blocky_model_empty.h"
 #include "meshers/blocky/voxel_blocky_model_mesh.h"
 #include "meshers/blocky/voxel_mesher_blocky.h"
-#include "meshers/cubeSphere/voxel_mesher_cubeSphere_blocky.h"
+//#include "meshers/cubeSphere/voxel_mesher_cubeSphere_blocky.h"
 #include "meshers/cubes/voxel_mesher_cubes.h"
 #include "meshers/dmc/voxel_mesher_dmc.h"
 #include "meshers/transvoxel/voxel_mesher_transvoxel.h"
 #include "modifiers/godot/voxel_modifier_gd.h"
 #include "modifiers/godot/voxel_modifier_mesh_gd.h"
 #include "modifiers/godot/voxel_modifier_sphere_gd.h"
+#include "storage/metadata/voxel_metadata_factory.h"
+#include "storage/metadata/voxel_metadata_variant.h"
 #include "storage/voxel_buffer_gd.h"
 #include "storage/voxel_memory_pool.h"
-#include "storage/voxel_metadata_variant.h"
 #include "streams/region/voxel_stream_region_files.h"
 #include "streams/sqlite/voxel_stream_sqlite.h"
 #include "streams/vox/vox_loader.h"
@@ -49,8 +50,8 @@
 #include "streams/voxel_stream_script.h"
 #include "terrain/fixed_lod/voxel_box_mover.h"
 #include "terrain/fixed_lod/voxel_terrain.h"
-#include "terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
-#include "terrain/fixed_cube_sphere/voxel_cs_terrain_multiplayer_synchronizer.h"
+//#include "terrain/fixed_cube_sphere/voxel_cube_sphere_terrain.h"
+//#include "terrain/fixed_cube_sphere/voxel_cs_terrain_multiplayer_synchronizer.h"
 #include "terrain/fixed_lod/voxel_terrain_multiplayer_synchronizer.h"
 #include "terrain/instancing/voxel_instance_component.h"
 #include "terrain/instancing/voxel_instance_library_scene_item.h"
@@ -65,7 +66,7 @@
 #include "util/noise/fast_noise_lite/fast_noise_lite.h"
 #include "util/noise/fast_noise_lite/fast_noise_lite_gradient.h"
 #include "util/noise/spot_noise_gd.h"
-#include "util/string_funcs.h"
+#include "util/string/format.h"
 #include "util/tasks/async_dependency_tracker.h"
 #include "util/tasks/godot/threaded_task_gd.h"
 
@@ -102,7 +103,6 @@
 #include "editor/spot_noise/spot_noise_editor_plugin.h"
 #include "editor/terrain/voxel_terrain_editor_plugin.h"
 #include "editor/vox/vox_editor_plugin.h"
-#include "editor/voxel_debug.h"
 #include "util/godot/classes/os.h"
 
 #ifdef VOXEL_ENABLE_FAST_NOISE_2
@@ -187,7 +187,7 @@ void print_size_reminders() {
 	ZN_PRINT_VERBOSE(format("Size of VoxelBuffer: {}", sizeof(VoxelBuffer)));
 	ZN_PRINT_VERBOSE(format("Size of VoxelMeshBlock: {}", sizeof(VoxelMeshBlock)));
 	ZN_PRINT_VERBOSE(format("Size of VoxelTerrain: {}", sizeof(VoxelTerrain)));
-	ZN_PRINT_VERBOSE(format("Size of VoxelCubeSphereTerrain: {}", sizeof(VoxelCubeSphereTerrain)));
+	//ZN_PRINT_VERBOSE(format("Size of VoxelCubeSphereTerrain: {}", sizeof(VoxelCubeSphereTerrain)));
 	ZN_PRINT_VERBOSE(format("Size of VoxelLodTerrain: {}", sizeof(VoxelLodTerrain)));
 	ZN_PRINT_VERBOSE(format("Size of VoxelInstancer: {}", sizeof(VoxelInstancer)));
 	ZN_PRINT_VERBOSE(format("Size of VoxelDataMap: {}", sizeof(VoxelDataMap)));
@@ -247,7 +247,7 @@ void initialize_voxel_module(ModuleInitializationLevel p_level) {
 		// Nodes
 		ClassDB::register_abstract_class<VoxelNode>();
 		ClassDB::register_class<VoxelTerrain>();
-		ClassDB::register_class<VoxelCubeSphereTerrain>();
+		//ClassDB::register_class<VoxelCubeSphereTerrain>();
 		ClassDB::register_class<VoxelLodTerrain>();
 		ClassDB::register_class<VoxelViewer>();
 		ClassDB::register_class<VoxelInstanceGenerator>();
@@ -282,7 +282,7 @@ void initialize_voxel_module(ModuleInitializationLevel p_level) {
 		ClassDB::register_class<VoxelRaycastResult>();
 		ClassDB::register_abstract_class<VoxelTool>();
 		ClassDB::register_abstract_class<VoxelToolTerrain>();
-		ClassDB::register_abstract_class<VoxelToolCubeSphereTerrain>();
+		//ClassDB::register_abstract_class<VoxelToolCubeSphereTerrain>();
 		ClassDB::register_abstract_class<VoxelToolLodTerrain>();
 		// I had to bind this one despite it being useless as-is because otherwise Godot lazily initializes its class.
 		// And this can happen in a thread, causing crashes due to the concurrent access
@@ -301,12 +301,12 @@ void initialize_voxel_module(ModuleInitializationLevel p_level) {
 		ClassDB::register_class<VoxelMeshSDF>();
 		ClassDB::register_class<VoxelTerrainMultiplayerSynchronizer>();
 		ClassDB::register_class<VoxelAStarGrid3D>();
-		ClassDB::register_class<VoxelCSTerrainMultiplayerSynchronizer>();
+		//ClassDB::register_class<VoxelCSTerrainMultiplayerSynchronizer>();
 
 		// Meshers
 		ClassDB::register_abstract_class<VoxelMesher>();
 		ClassDB::register_class<VoxelMesherBlocky>();
-		ClassDB::register_class<VoxelMesherCubeSphereBlocky>();
+		//ClassDB::register_class<VoxelMesherCubeSphereBlocky>();
 		ClassDB::register_class<VoxelMesherTransvoxel>();
 		ClassDB::register_class<VoxelMesherDMC>();
 		ClassDB::register_class<VoxelMesherCubes>();
@@ -529,7 +529,6 @@ void uninitialize_voxel_module(ModuleInitializationLevel p_level) {
 
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-		zylann::godot::free_debug_resources();
 		VoxelGraphEditorNodePreview::unload_resources();
 
 		// Plugins are automatically unregistered since https://github.com/godotengine/godot-cpp/pull/1138

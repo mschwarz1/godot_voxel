@@ -3,7 +3,7 @@
 
 #include "../../util/containers/std_vector.h"
 #include "../../util/godot/classes/resource.h"
-#include "../../util/std_string.h"
+#include "../../util/string/std_string.h"
 #include "../../util/thread/mutex.h"
 #include "program_graph.h"
 #include "voxel_graph_runtime.h"
@@ -71,10 +71,6 @@ public:
 		NODE_FAST_NOISE_GRADIENT_3D,
 		NODE_OUTPUT_WEIGHT,
 		NODE_OUTPUT_TYPE,
-#ifdef VOXEL_ENABLE_FAST_NOISE_2
-		NODE_FAST_NOISE_2_2D,
-		NODE_FAST_NOISE_2_3D,
-#endif
 		NODE_OUTPUT_SINGLE_TEXTURE,
 		NODE_EXPRESSION,
 		NODE_POWI, // pow(x, constant positive integer)
@@ -87,6 +83,14 @@ public:
 		NODE_RELAY,
 		NODE_SPOTS_2D,
 		NODE_SPOTS_3D,
+
+	// Optional features down (to avoid diffs in docs when building both versions)
+	// Keep in mind this enum's values should not be used in persistent context (saves)
+
+#ifdef VOXEL_ENABLE_FAST_NOISE_2
+		NODE_FAST_NOISE_2_2D,
+		NODE_FAST_NOISE_2_3D,
+#endif
 
 		NODE_TYPE_COUNT
 	};
@@ -121,11 +125,11 @@ public:
 	// Important: functions editing the graph are NOT thread-safe.
 	// They are expected to be used by the main thread (editor or game logic).
 
-	uint32_t create_node(NodeTypeID type_id, Vector2 position, uint32_t id = ProgramGraph::NULL_ID);
+	uint32_t create_node(NodeTypeID type_id, Vector2 position = Vector2(), uint32_t id = ProgramGraph::NULL_ID);
 	void remove_node(uint32_t node_id);
 
 	uint32_t create_function_node(
-			Ref<VoxelGraphFunction> func, Vector2 position, uint32_t p_id = ProgramGraph::NULL_ID);
+			Ref<VoxelGraphFunction> func, Vector2 position = Vector2(), uint32_t p_id = ProgramGraph::NULL_ID);
 
 	// Checks if the specified connection can be created
 	bool can_connect(

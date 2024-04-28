@@ -1,12 +1,12 @@
 #include "voxel_blocky_model.h"
+#include "../../util/containers/container_funcs.h"
 #include "../../util/godot/classes/array_mesh.h"
 #include "../../util/godot/classes/base_material_3d.h"
 #include "../../util/godot/classes/shader_material.h"
 #include "../../util/godot/core/array.h"
 #include "../../util/godot/core/string.h"
-#include "../../util/macros.h"
 #include "../../util/math/conv.h"
-#include "../../util/string_funcs.h"
+#include "../../util/string/format.h"
 #include "voxel_blocky_library.h"
 
 // TODO Only required because of MAX_MATERIALS... could be enough inverting that dependency
@@ -41,12 +41,12 @@ bool VoxelBlockyModel::_set(const StringName &p_name, const Variant &p_value) {
 	String property_name = p_name;
 
 	if (property_name.begins_with("material_override_")) {
-		const int index = property_name.substr(ZN_ARRAY_LENGTH("material_override_")).to_int();
+		const int index = property_name.substr(string_literal_length("material_override_")).to_int();
 		set_material_override(index, p_value);
 		return true;
 
 	} else if (property_name.begins_with("collision_enabled_")) {
-		const int index = property_name.substr(ZN_ARRAY_LENGTH("collision_enabled_")).to_int();
+		const int index = property_name.substr(string_literal_length("collision_enabled_")).to_int();
 		set_mesh_collision_enabled(index, p_value);
 		return true;
 	}
@@ -54,7 +54,7 @@ bool VoxelBlockyModel::_set(const StringName &p_name, const Variant &p_value) {
 	// LEGACY
 
 	if (property_name.begins_with("cube_tiles_")) {
-		String s = property_name.substr(ZN_ARRAY_LENGTH("cube_tiles_") - 1, property_name.length());
+		String s = property_name.substr(string_literal_length("cube_tiles_"), property_name.length());
 		Cube::Side side = VoxelBlockyModelCube::name_to_side(s);
 		if (side != Cube::SIDE_COUNT) {
 			Vector2 v = p_value;
@@ -87,12 +87,12 @@ bool VoxelBlockyModel::_get(const StringName &p_name, Variant &r_ret) const {
 	String property_name = p_name;
 
 	if (property_name.begins_with("material_override_")) {
-		const int index = property_name.substr(ZN_ARRAY_LENGTH("material_override_")).to_int();
+		const int index = property_name.substr(string_literal_length("material_override_")).to_int();
 		r_ret = get_material_override(index);
 		return true;
 
 	} else if (property_name.begins_with("collision_enabled_")) {
-		const int index = property_name.substr(ZN_ARRAY_LENGTH("collision_enabled_")).to_int();
+		const int index = property_name.substr(string_literal_length("collision_enabled_")).to_int();
 		r_ret = is_mesh_collision_enabled(index);
 		return true;
 	}
@@ -100,7 +100,7 @@ bool VoxelBlockyModel::_get(const StringName &p_name, Variant &r_ret) const {
 	// LEGACY
 
 	if (property_name.begins_with("cube_tiles_")) {
-		String s = property_name.substr(ZN_ARRAY_LENGTH("cube_tiles_") - 1, property_name.length());
+		String s = property_name.substr(string_literal_length("cube_tiles_"), property_name.length());
 		Cube::Side side = VoxelBlockyModelCube::name_to_side(s);
 		if (side != Cube::SIDE_COUNT) {
 			const Vector2f f = _legacy_properties.cube_tiles[side];
@@ -243,7 +243,7 @@ void VoxelBlockyModel::bake(BakedData &baked_data, bool bake_tangents, MaterialI
 		bool empty = true;
 		for (unsigned int surface_index = 0; surface_index < model.surface_count; ++surface_index) {
 			const BakedData::Surface &surface = model.surfaces[surface_index];
-			if (surface.side_indices[side].size() > 0) {
+			if (surface.sides[side].indices.size() > 0) {
 				empty = false;
 				break;
 			}
@@ -356,9 +356,9 @@ Ref<Mesh> VoxelBlockyModel::make_mesh_from_baked_data(const BakedData &baked_dat
 		// Get vertex and index count in the surface
 		unsigned int vertex_count = surface.positions.size();
 		unsigned int index_count = surface.indices.size();
-		for (unsigned int side = 0; side < surface.side_positions.size(); ++side) {
-			vertex_count += surface.side_positions[side].size();
-			index_count += surface.side_indices[side].size();
+		for (const BakedData::SideSurface &side_surface : surface.sides) {
+			vertex_count += side_surface.positions.size();
+			index_count += side_surface.indices.size();
 		}
 
 		// Allocate surface arrays
@@ -414,11 +414,12 @@ Ref<Mesh> VoxelBlockyModel::make_mesh_from_baked_data(const BakedData &baked_dat
 			++ii;
 		}
 
-		for (unsigned int side = 0; side < surface.side_positions.size(); ++side) {
-			Span<const Vector3f> side_positions = to_span(surface.side_positions[side]);
-			Span<const Vector2f> side_uvs = to_span(surface.side_uvs[side]);
-			Span<const int> side_indices = to_span(surface.side_indices[side]);
-			Span<const float> side_tangents = to_span(surface.side_tangents[side]);
+		for (unsigned int side = 0; side < surface.sides.size(); ++side) {
+			const BakedData::SideSurface &side_surface = surface.sides[side];
+			Span<const Vector3f> side_positions = to_span(side_surface.positions);
+			Span<const Vector2f> side_uvs = to_span(side_surface.uvs);
+			Span<const int> side_indices = to_span(side_surface.indices);
+			Span<const float> side_tangents = to_span(side_surface.tangents);
 			const Vector3 side_normal = to_vec3(Cube::g_side_normals[side]);
 
 			const unsigned int vi0 = vi;
