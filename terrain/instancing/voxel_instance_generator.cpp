@@ -390,7 +390,7 @@ void VoxelInstanceGenerator::generate_transforms(StdVector<Transform3f> &out_tra
 
 		for (size_t i = 0; i < vertex_cache.size(); ++i) {
 			const float n = noise_cache[i];
-			if (n <= 0) {
+			if (n <= _noise_clamp) {
 				unordered_remove(vertex_cache, i);
 				unordered_remove(normal_cache, i);
 				unordered_remove(noise_cache, i);
@@ -577,6 +577,10 @@ void VoxelInstanceGenerator::generate_transforms(StdVector<Transform3f> &out_tra
 
 void VoxelInstanceGenerator::set_density(float density) {
 	density = math::max(density, 0.f);
+	if (EMIT_FROM_VERTICES == get_emit_mode())
+	{
+		density = math::min(density, MAX_DENSITY);
+	}
 	if (density == _density) {
 		return;
 	}
@@ -594,6 +598,7 @@ void VoxelInstanceGenerator::set_emit_mode(EmitMode mode) {
 		return;
 	}
 	_emit_mode = mode;
+	set_density(_density);
 	emit_changed();
 }
 
@@ -812,6 +817,21 @@ VoxelInstanceGenerator::Dimension VoxelInstanceGenerator::get_noise_dimension() 
 	return _noise_dimension;
 }
 
+void VoxelInstanceGenerator::set_noise_clamp(float amount)
+{
+	if (amount == _noise_clamp) {
+		return;
+	}
+
+	_noise_clamp = amount;
+	emit_changed();
+}
+
+float VoxelInstanceGenerator::get_noise_clamp() const
+{
+	return _noise_clamp;
+}
+
 void VoxelInstanceGenerator::set_noise_on_scale(float amount) {
 	amount = math::clamp(amount, 0.f, 1.f);
 	if (amount == _noise_on_scale) {
@@ -912,15 +932,18 @@ void VoxelInstanceGenerator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_noise_dimension", "dim"), &VoxelInstanceGenerator::set_noise_dimension);
 	ClassDB::bind_method(D_METHOD("get_noise_dimension"), &VoxelInstanceGenerator::get_noise_dimension);
 
+	ClassDB::bind_method(D_METHOD("set_noise_clamp", "amount"), &VoxelInstanceGenerator::set_noise_clamp);
+	ClassDB::bind_method(D_METHOD("get_noise_clamp"), &VoxelInstanceGenerator::get_noise_clamp);
+
 	ClassDB::bind_method(D_METHOD("set_noise_on_scale", "amount"), &VoxelInstanceGenerator::set_noise_on_scale);
 	ClassDB::bind_method(D_METHOD("get_noise_on_scale"), &VoxelInstanceGenerator::get_noise_on_scale);
 
 	ADD_GROUP("Emission", "");
 
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, DENSITY_HINT_STRING), "set_density",
-			"get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "emit_mode", PROPERTY_HINT_ENUM, "Vertices,FacesFast,Faces"),
 			"set_emit_mode", "get_emit_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density"), "set_density",
+			"get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "min_slope_degrees", PROPERTY_HINT_RANGE, "0.0, 180.0, 0.1"),
 			"set_min_slope_degrees", "get_min_slope_degrees");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_slope_degrees", PROPERTY_HINT_RANGE, "0.0, 180.0, 0.1"),
@@ -959,6 +982,8 @@ void VoxelInstanceGenerator::_bind_methods() {
 			"set_noise_graph", "get_noise_graph");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "noise_dimension", PROPERTY_HINT_ENUM, "2D,3D"), "set_noise_dimension",
 			"get_noise_dimension");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "noise_clamp", PROPERTY_HINT_RANGE, "-1.0, 1.0, 0.01"),
+			"set_noise_clamp", "get_noise_clamp");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "noise_on_scale", PROPERTY_HINT_RANGE, "0.0, 1.0, 0.01"),
 			"set_noise_on_scale", "get_noise_on_scale");
 

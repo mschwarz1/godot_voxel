@@ -111,6 +111,9 @@ public:
 	void set_random_rotation(bool enabled);
 	bool get_random_rotation() const;
 
+	void set_random_y_rotation(bool enabled);
+	bool get_random_y_rotation() const;
+	
 	void set_noise(Ref<Noise> noise);
 	Ref<Noise> get_noise() const;
 
@@ -119,6 +122,9 @@ public:
 
 	void set_noise_dimension(Dimension dim);
 	Dimension get_noise_dimension() const;
+
+	void set_noise_clamp(float amount);
+	float get_noise_clamp() const;
 
 	void set_noise_on_scale(float amount);
 	float get_noise_on_scale() const;
@@ -141,7 +147,6 @@ private:
 
 	static void _bind_methods();
 
-	float _density = 0.1f;
 	float _vertical_alignment = 1.f;
 	float _min_scale = 1.f;
 	float _max_scale = 1.f;
@@ -152,10 +157,13 @@ private:
 	float _max_height = std::numeric_limits<float>::max();
 	bool _random_vertical_flip = false;
 	bool _random_rotation = true;
+	bool _random_y_rotation = true;
 	EmitMode _emit_mode = EMIT_FROM_VERTICES;
+	float _density = 0.1f;
 	Distribution _scale_distribution = DISTRIBUTION_QUADRATIC;
 	Ref<Noise> _noise;
 	Dimension _noise_dimension = DIMENSION_3D;
+	float _noise_clamp = 0.0f;
 	float _noise_on_scale = 0.f;
 
 	// TODO Protect noise and noise graph members from multithreaded access

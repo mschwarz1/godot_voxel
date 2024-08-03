@@ -252,6 +252,16 @@ inline Interval sin(const Interval &i) {
 	}
 }
 
+inline Interval cos(const Interval &i) {
+	if (i.is_single_value()) {
+		return Interval::from_single_value(Math::cos(i.min));
+	} else {
+		// TODO more precision
+		// Simplified
+		return Interval(-1.f, 1.f);
+	}
+}
+
 inline Interval atan(const Interval &t) {
 	if (t.is_single_value()) {
 		return Interval::from_single_value(Math::atan(t.min));
